@@ -244,7 +244,7 @@ int Global::getCurrentFrame(bool editor) {
   
   if (!pl) return 0;
   
-  return pl->m_gameState.m_currentProgress - g.frameOffset;
+  return pl->m_gameState.m_currentProgress / 2 - g.frameOffset;
 }
 
 class $modify(FrameCounterGJBaseGameLayer, GJBaseGameLayer) {
@@ -258,9 +258,15 @@ class $modify(FrameCounterGJBaseGameLayer, GJBaseGameLayer) {
     !playLayer->m_player1->m_isDead &&
     (!playLayer->m_gameState.m_isDualMode || !playLayer->m_player2->m_isDead);
     
+    // Like eclipse, enable tps bypass at 240fps when playing macros to avoid halfticks
+    if (g.state == state::playing && !g.tpsEnabled) {
+      g.setTpsEnabled(true);
+      g.setTps(240.f);
+    }
+    
     g.m_isHalfTick = isHalfTick;
     GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
-    
+
     if (isPlaying && !isHalfTick) {
       g.m_frameCount++;
     }
@@ -283,7 +289,7 @@ void Global::updateSeed(bool isRestart) {
     uint64_t finalSeed;
     
     if (!pl->m_player1->m_isDead) {
-      g.gen.seed(seed + static_cast<uint64_t>(pl->m_gameState.m_currentProgress));
+      g.gen.seed(seed + static_cast<uint64_t>(pl->m_gameState.m_currentProgress / 2));
       
       finalSeed = g.gen.generate(10000, 1000000000);
     }

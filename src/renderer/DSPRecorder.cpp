@@ -59,38 +59,61 @@ void DSPRecorder::start() {
 
 void DSPRecorder::stop() {
     if (!m_recording) return;
-    m_masterGroup->removeDSP(m_dsp);
-    m_recording = false;
-    log::info("DSPRecorder: stopped, {} samples captured", m_data.lock()->size());
-    Loader::get()->queueInMainThread([this] {
+    // FMOD operations must be done on the main thread, so queue the stop operation
+    geode::queueInMainThread([this] {
+        if (!m_recording) return;
+        m_masterGroup->removeDSP(m_dsp);
+        m_recording = false;
+        log::info("DSPRecorder: stopped, {} samples captured", m_data.lock()->size());
         m_masterGroup->setPaused(false);
     });
 }
 
+void DSPRecorder::stopBlocking() {
+    if (!m_recording) return;
+    
+    // FMOD operations must be done on the main thread, so queue the stop operation
+    geode::queueInMainThread([this] {
+        if (!m_recording) return;
+        m_masterGroup->removeDSP(m_dsp);
+        m_recording = false;
+        log::info("DSPRecorder: stopped, {} samples captured", m_data.lock()->size());
+        m_masterGroup->setPaused(false);
+        
+        // Signal that we're done by setting the flag
+        m_stopComplete = true;
+    });
+    
+    // wait for the main thread to finish stopping the DSP
+    // This is a simple spin-wait since the FMOD operations are very fast
+    for (int i = 0; i < 100 && !m_stopComplete; i++) {
+        asp::sleep(asp::Duration::fromMillis(1));
+    }
+    m_stopComplete = false;
+}
+
 std::vector<float> DSPRecorder::getData() {
     auto guard = m_data.lock();
-    auto data = std::move(*guard);  // move out, leaving m_data empty
-    return data;
+    return std::move(*guard);
 }
 
 void DSPRecorder::tryUnpause(float time) const {
+    // Don't try to unpause if we've stopped recording (m_recording is false)
+    // This prevents unpausing while the audio is being mixed in another thread
+    if (!m_recording) return;
     if (!m_masterGroup) return;
     auto* system = FMODAudioEngine::sharedEngine()->m_system;
     int sampleRate = 0, channels = 0;
     system->getSoftwareFormat(&sampleRate, nullptr, &channels);
     if (sampleRate <= 0 || channels <= 0) return;
 
-    for (int i = 0; i < 200; i++) {
-        float songTime;
-        {
-            auto guard = m_data.lock();
-            songTime = static_cast<float>(guard->size()) /
-                       (static_cast<float>(sampleRate) * static_cast<float>(channels));
-        }
-        if (songTime >= time) break;
-        m_masterGroup->setPaused(false);
-        asp::sleep(asp::Duration::fromMicros(100));
+    float songTime;
+    {
+        auto guard = m_data.lock();
+        songTime = static_cast<float>(guard->size()) /
+                   (static_cast<float>(sampleRate) * static_cast<float>(channels));
     }
+    if (time >= songTime) m_masterGroup->setPaused(false);
 }
 
 #endif

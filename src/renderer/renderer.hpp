@@ -49,6 +49,7 @@ public:
     float totalTime   = 0.f;
     float extra_t     = 0.f;
     float lastFrame_t = 0.f;
+    float capturedLastFrameTime = 0.f; 
 
     // Resolution
     unsigned width, height, fps;

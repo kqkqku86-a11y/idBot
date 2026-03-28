@@ -343,7 +343,15 @@ class $modify(BGLHook, GJBaseGameLayer) {
             return;
         }
 
+        // For pre-2.2081 macros, use m_currentProgress / 2 directly (like eclipse does)
+        // Don't use getCurrentFrame() as it applies frameOffset which breaks legacy macros
+        if (!g.macro.xdBotMacro) {
+            frame = m_gameState.m_currentProgress / 2;
+        }
+
         m_fields->macroInput = true;
+
+        log::info("handlePlaying: frame={}, xdBotMacro={}, m_currentProgress={}", frame, g.macro.xdBotMacro, m_gameState.m_currentProgress);
 
         while (g.currentAction < g.macro.inputs.size() && frame >= g.macro.inputs[g.currentAction].frame) {
             auto input = g.macro.inputs[g.currentAction];
@@ -389,6 +397,18 @@ class $modify(BGLHook, GJBaseGameLayer) {
             g.currentFrameFix++;
         }
     }
+    
+    #ifdef GEODE_IS_MOBILE
+    bool isButtonAllowed(bool down, int button, bool isPlayer1) {
+        auto& g = Global::get();
+        
+        if (g.state != state::none) {
+            return true;
+        }
+        
+        return GJBaseGameLayer::isButtonAllowed(down, button, isPlayer1);
+    }
+    #endif
 
     void handleButton(bool hold, int button, bool player2) {
         auto& g = Global::get();

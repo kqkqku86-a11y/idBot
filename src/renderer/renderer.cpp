@@ -3,7 +3,7 @@
 #include "DSPRecorder.hpp"
 
 #include <Geode/modify/CCCircleWave.hpp>
-#include <Geode/modify/CCParticleSystemQuad.hpp>
+#include <Geode/modify/CCParticleSystem.hpp>
 #include <Geode/modify/CCScheduler.hpp>
 #include <Geode/modify/EndLevelLayer.hpp>
 #include <Geode/modify/FMODAudioEngine.hpp>
@@ -15,22 +15,23 @@
 #include "../utils/subprocess.hpp"
 #endif
 
-#include <filesystem>
-#include <thread>
-
 #ifndef GEODE_IS_IOS
 
-static bool writePCMWav(const std::filesystem::path& outPath,
-                        std::span<const float> pcm, FMOD::System* system);
+static bool writePCMWav(const std::filesystem::path& outPath, std::span<const float> pcm, FMOD::System* system);
 
-class $modify(CCParticleSystemQuad) {
-    static CCParticleSystemQuad* create(const char* v1, bool v2) {
-        CCParticleSystemQuad* ret = CCParticleSystemQuad::create(v1, v2);
-        if (!Global::get().renderer.recording) return ret;
-        if (std::string_view(v1) == "levelComplete01.plist" &&
-            Mod::get()->getSavedValue<bool>("render_hide_levelcomplete"))
-            ret->setVisible(false);
-        return ret;
+class $modify(CCParticleSystem) {
+    void initParticle(sCCParticle* p0) {
+        CCParticleSystem::initParticle(p0);
+        
+        if (!Mod::get()->getSavedValue<bool>("render_hide_levelcomplete")) return;
+        
+        if (auto particle = typeinfo_cast<CCParticleSystemQuad*>(this)) {
+            PlayLayer* pl = PlayLayer::get();
+            if (!pl) return;
+            if (this->getParent() != pl) return;
+            
+            particle->setVisible(false);
+        }
     }
 };
 
@@ -45,17 +46,20 @@ class $modify(CCCircleWave) {
     }
 };
 
-class $modify(RenderPlayLayerHook, PlayLayer) {
+class $modify(PlayLayer) {
     void showCompleteText() {
         PlayLayer::showCompleteText();
+        
         if (!Global::get().renderer.recording) return;
-        if (m_levelEndAnimationStarted &&
-            Mod::get()->getSavedValue<bool>("render_hide_levelcomplete")) {
-            for (CCNode* node : CCArrayExt<CCNode*>(getChildren())) {
-                CCSprite* spr = typeinfo_cast<CCSprite*>(node);
-                if (!spr) continue;
-                if (!isSpriteFrameName(spr, "GJ_levelComplete_001.png")) continue;
-                spr->setVisible(false);
+        
+        if (m_levelEndAnimationStarted && Mod::get()->getSavedValue<bool>("render_hide_levelcomplete")) {
+                const char* spriteName = m_isPracticeMode ? 
+                    "GJ_practiceComplete_001.png" : 
+                    "GJ_levelComplete_001.png";
+                
+            if (auto* node = getChildBySpriteFrameName(this, spriteName)) {
+                node->stopAllActions();
+                node->setVisible(false);
             }
         }
     }
@@ -79,16 +83,18 @@ class $modify(FMODAudioEngine) {
         return FMODAudioEngine::playEffect(path, speed, p2, volume);
     }
 };
-class $modify(InternalRecorderSLHook, ShaderLayer) {
-    void visit() {
-        if (Global::get().renderer.recording) {
-            setScaleY(-1);
-            ShaderLayer::visit();
-            return setScaleY(1);
-        }
-        ShaderLayer::visit();
-    }
-};
+
+// class $modify(InternalRecorderSLHook, ShaderLayer) {
+//     void visit() {
+//         if (Global::get().renderer.recording) {
+//             setScaleY(-1);
+//             ShaderLayer::visit();
+//             return setScaleY(1);
+//         }
+//         ShaderLayer::visit();
+//     }
+// };
+
 class $modify(CCScheduler) {
     void update(float dt) {
         Renderer& r = Global::get().renderer;
@@ -106,6 +112,7 @@ class $modify(CCScheduler) {
         r.restoreWinSize();
     }
 };
+
 class $modify(GJBaseGameLayer) {
     void update(float dt) {
         Renderer& r = Global::get().renderer;
@@ -116,11 +123,11 @@ class $modify(GJBaseGameLayer) {
         float endscreen = Mod::get()->getSavedValue<float>("render_seconds_after");
 
         if (r.levelFinished) {
-            if (r.timeAfter > endscreen) {
+            r.timeAfter += dt;
+            if (r.timeAfter >= r.stopAfter) {
                 r.stop();
                 return GJBaseGameLayer::update(dt);
             }
-            r.timeAfter += dt;
         }
 
         if (!r.recording)
@@ -147,13 +154,8 @@ class $modify(GJBaseGameLayer) {
 
         GJBaseGameLayer::update(dt);
     }
-
-    // void visit() override {
-    //     Renderer& r = Global::get().renderer;
-    //     if (r.recording && !r.capturing) return;
-    //     GJBaseGameLayer::visit();
-    // }
 };
+
 class $modify(RendererPlayLayerHook, PlayLayer) {
     void onQuit() {
         if (Global::get().renderer.recording) Global::get().renderer.stop();
@@ -166,11 +168,11 @@ class $modify(RendererPlayLayerHook, PlayLayer) {
     }
 
     void resetLevel() {
-        Global::get().renderer.levelFinished = false;
-        Global::get().renderer.timeAfter     = 0.f;
-        Global::get().renderer.totalTime     = 0.f;
-        Global::get().renderer.extra_t       = 0.f;
-        Global::get().renderer.lastFrame_t   = 0.f;
+        auto& r = Global::get().renderer;
+        if (r.recording) {
+            r.levelFinished = false;
+            r.timeAfter     = 0.f;
+        }
         PlayLayer::resetLevel();
     }
 };
@@ -307,18 +309,18 @@ void Renderer::start() {
     Mod*       mod = Mod::get();
     fmod = FMODAudioEngine::sharedEngine();
 
-    fps          = geode::utils::numFromString<int>(
-                       mod->getSavedValue<std::string>("render_fps")).unwrapOr(60);
-    codec        = mod->getSavedValue<std::string>("render_codec");
-    bitrate      = mod->getSavedValue<std::string>("render_bitrate") + "M";
-    extraArgs    = mod->getSavedValue<std::string>("render_args");
-    videoArgs    = mod->getSavedValue<std::string>("render_video_args");
+    fps            = geode::utils::numFromString<int>(
+                         mod->getSavedValue<std::string>("render_fps")).unwrapOr(60);
+    codec          = mod->getSavedValue<std::string>("render_codec");
+    bitrate        = mod->getSavedValue<std::string>("render_bitrate") + "M";
+    extraArgs      = mod->getSavedValue<std::string>("render_args");
+    videoArgs      = mod->getSavedValue<std::string>("render_video_args");
     extraAudioArgs = mod->getSavedValue<std::string>("render_audio_args");
-    SFXVolume    = mod->getSavedValue<double>("render_sfx_volume");
-    musicVolume  = mod->getSavedValue<double>("render_music_volume");
-    stopAfter    = geode::utils::numFromString<float>(
-                       mod->getSavedValue<std::string>("render_seconds_after")).unwrapOr(0.f);
-    audioMode    = AudioMode::Record;
+    SFXVolume      = mod->getSavedValue<double>("render_sfx_volume");
+    musicVolume    = mod->getSavedValue<double>("render_music_volume");
+    stopAfter      = geode::utils::numFromString<float>(
+                         mod->getSavedValue<std::string>("render_seconds_after")).unwrapOr(0.f);
+    audioMode      = AudioMode::Record;
 
     std::string extension = mod->getSavedValue<std::string>("render_file_extension");
     auto timestamp = asp::time::SystemTime::now().timeSinceEpoch().millis();
@@ -397,6 +399,7 @@ void Renderer::stop(int /*frame*/) {
 
     m_renderTexture.end();
     restoreWinSize();
+    
     DSPRecorder::get()->stop();
 }
 
@@ -466,8 +469,7 @@ void Renderer::recordThread() {
 
     int bitrateVal = geode::utils::numFromString<int>(
         mod->getSavedValue<std::string>("render_bitrate")).unwrapOr(12) * 1000000;
-        
-    
+
     log::info("Renderer: usingApi={}, videoArgs='{}'", usingApi, videoArgs);
 
     ffmpeg::RenderSettings settings;
@@ -478,11 +480,7 @@ void Renderer::recordThread() {
     settings.m_height            = height;
     settings.m_fps               = static_cast<uint16_t>(fps);
     settings.m_outputFile        = path;
-    if (usingApi) {
-        settings.m_colorspaceFilters = "";
-    } else {
-        settings.m_colorspaceFilters = videoArgs;
-    }
+    settings.m_colorspaceFilters = usingApi ? "" : videoArgs;
     settings.m_doVerticalFlip    = true;
 
 #ifdef GEODE_IS_WINDOWS
@@ -493,9 +491,9 @@ void Renderer::recordThread() {
         auto res = ffmpeg.init(settings);
         if (res.isErr()) {
             recording = false;
-            DSPRecorder::get()->stop();
             m_frameReady.set(true);
             Loader::get()->queueInMainThread([] {
+                DSPRecorder::get()->stop();
                 FLAlertLayer::create("Error", "FFmpeg API failed to initialize.", "OK")->show();
             });
             return;
@@ -572,6 +570,8 @@ void Renderer::recordThread() {
     }
 #endif
 
+    // stop DSP here in the thread, just like Eclipse does
+    DSPRecorder::get()->stopBlocking();
     auto pcm = DSPRecorder::get()->getData();
 
     Loader::get()->queueInMainThread([] {

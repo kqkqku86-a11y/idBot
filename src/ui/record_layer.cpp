@@ -266,7 +266,7 @@ class $modify(PauseLayer) {
     }
     
     void RecordLayer::toggleRender(CCObject* btn) {
-        #ifdef GEODE_IS_WINDOWS
+        #ifndef GEODE_IS_IOS
         if (!Renderer::toggle())
         static_cast<CCMenuItemToggler*>(btn)->toggle(true);
         #else
