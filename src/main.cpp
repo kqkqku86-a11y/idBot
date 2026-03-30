@@ -245,7 +245,7 @@ class $modify(BGLHook, GJBaseGameLayer) {
         }
 
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
-
+        
         if (isHalfTick) return;
         if (g.state == state::none) return;
 
@@ -342,16 +342,12 @@ class $modify(BGLHook, GJBaseGameLayer) {
             m_player2->releaseAllButtons();
             return;
         }
-
-        // For pre-2.2081 macros, use m_currentProgress / 2 directly (like eclipse does)
-        // Don't use getCurrentFrame() as it applies frameOffset which breaks legacy macros
+        
         if (!g.macro.xdBotMacro) {
-            frame = m_gameState.m_currentProgress / 2;
+            frame = m_gameState.m_currentProgress / 2 - g.frameOffset;
         }
 
         m_fields->macroInput = true;
-
-        log::info("handlePlaying: frame={}, xdBotMacro={}, m_currentProgress={}", frame, g.macro.xdBotMacro, m_gameState.m_currentProgress);
 
         while (g.currentAction < g.macro.inputs.size() && frame >= g.macro.inputs[g.currentAction].frame) {
             auto input = g.macro.inputs[g.currentAction];
@@ -397,19 +393,7 @@ class $modify(BGLHook, GJBaseGameLayer) {
             g.currentFrameFix++;
         }
     }
-    
-    #ifdef GEODE_IS_MOBILE
-    bool isButtonAllowed(bool down, int button, bool isPlayer1) {
-        auto& g = Global::get();
         
-        if (g.state != state::none) {
-            return true;
-        }
-        
-        return GJBaseGameLayer::isButtonAllowed(down, button, isPlayer1);
-    }
-    #endif
-
     void handleButton(bool hold, int button, bool player2) {
         auto& g = Global::get();
 
@@ -447,6 +431,10 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
         if (g.inputFixes)
             g.macro.recordFrameFix(frame, m_player1, m_player2);
+        
+        #ifdef GEODE_IS_MOBILE
+        m_allowedButtons.clear(); // mobile swift click patch bypass
+        #endif
 
         GJBaseGameLayer::handleButton(hold, button, player2);
 

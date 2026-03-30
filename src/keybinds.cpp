@@ -5,27 +5,20 @@
 #include <Geode/loader/SettingV3.hpp>
 #include <Geode/loader/GameEvent.hpp>
 #include <Geode/utils/Keyboard.hpp>
+#include <Geode/modify/CCKeyboardDispatcher.hpp>
 
-/* class $modify(CCKeyboardDispatcher) {
+class $modify(CCKeyboardDispatcher) {
     bool dispatchKeyboardMSG(enumKeyCodes key, bool isKeyDown, bool isKeyRepeat, double time) {
         
         auto& g = Global::get();
-        
-        int keyInt = static_cast<int>(key);
-        if (g.allKeybinds.contains(keyInt) && !isKeyRepeat) {
-            for (size_t i = 0; i < 6; i++) {
-                if (std::find(g.keybinds[i].begin(), g.keybinds[i].end(), keyInt) != g.keybinds[i].end())
-                g.heldButtons[i] = isKeyDown;
-            }
-        }
-        
+                
         // if (key == enumKeyCodes::KEY_L && !isKeyRepeat && isKeyDown) {
         // }
         
-        // if (key == enumKeyCodes::KEY_F && !isKeyRepeat && isKeyDown && PlayLayer::get()) {
-        //   log::debug("POS DEBUG {}", PlayLayer::get()->m_player1->getPosition());
-        //   log::debug("POS2 DEBUG {}", PlayLayer::get()->m_player2->getPosition());
-        // }
+        if (key == enumKeyCodes::KEY_F && !isKeyRepeat && isKeyDown && PlayLayer::get()) {
+           log::debug("POS DEBUG {}", PlayLayer::get()->m_player1->getPosition());
+           log::debug("POS2 DEBUG {}", PlayLayer::get()->m_player2->getPosition());
+        }
         
         
         // if (key == enumKeyCodes::KEY_J && !isKeyRepeat && isKeyDown && PlayLayer::get()) {
@@ -35,7 +28,7 @@
         
         return CCKeyboardDispatcher::dispatchKeyboardMSG(key, isKeyDown, isKeyRepeat, time);
     }
-};*/
+};
 
 $on_mod(Loaded) {
     KeyboardInputEvent().listen([](KeyboardInputData& data) {
@@ -52,7 +45,7 @@ $on_mod(Loaded) {
                 }
             }
         }
-
+        
         return ListenerResult::Propagate;
     }).leak();
 }
