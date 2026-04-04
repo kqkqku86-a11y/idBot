@@ -382,12 +382,30 @@ class $modify(BGLHook, GJBaseGameLayer) {
                 p1->setPosition(fix.p1.pos);
             if (fix.p1.rotate && fix.p1.rotation != 0.f)
                 p1->setRotation(fix.p1.rotation);
+            // Apply velocity from frame fix for improved accuracy
+            if (fix.p1.yVelocity != 0.0)
+                p1->m_yVelocity = fix.p1.yVelocity;
+            if (fix.p1.xVelocity != 0.0)
+                p1->m_platformerXVelocity = fix.p1.xVelocity;
+            if (fix.p1.isDashing)
+                p1->m_isDashing = fix.p1.isDashing;
+            if (fix.p1.isOnGround)
+                p1->m_isOnGround = fix.p1.isOnGround;
 
             if (m_gameState.m_isDualMode) {
                 if (fix.p2.pos.x != 0.f && fix.p2.pos.y != 0.f)
                     p2->setPosition(fix.p2.pos);
                 if (fix.p2.rotate && fix.p2.rotation != 0.f)
                     p2->setRotation(fix.p2.rotation);
+                // Apply velocity from frame fix for player 2
+                if (fix.p2.yVelocity != 0.0)
+                    p2->m_yVelocity = fix.p2.yVelocity;
+                if (fix.p2.xVelocity != 0.0)
+                    p2->m_platformerXVelocity = fix.p2.xVelocity;
+                if (fix.p2.isDashing)
+                    p2->m_isDashing = fix.p2.isDashing;
+                if (fix.p2.isOnGround)
+                    p2->m_isOnGround = fix.p2.isOnGround;
             }
 
             g.currentFrameFix++;

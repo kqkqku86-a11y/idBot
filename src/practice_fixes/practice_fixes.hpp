@@ -13,12 +13,8 @@ class PracticeFix {
         PlayLayer* pl = PlayLayer::get();
         if (!pl || !pl->m_isPracticeMode) return false;
         
-        auto& g = Global::get();
-        if (g.state != state::none) return true;
-        
-        if (g.alwaysPracticeFixes && pl->m_isPlatformer) return true;
-        
-        return false;
+        // Enable practice fixes in Vanilla too - capture/restore player state in practice mode
+        return true;
     }
 };
 

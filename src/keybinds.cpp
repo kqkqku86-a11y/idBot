@@ -15,10 +15,12 @@ class $modify(CCKeyboardDispatcher) {
         // if (key == enumKeyCodes::KEY_L && !isKeyRepeat && isKeyDown) {
         // }
         
+        #ifdef DEBUG_PRACTICE_FIXES
         if (key == enumKeyCodes::KEY_F && !isKeyRepeat && isKeyDown && PlayLayer::get()) {
            log::debug("POS DEBUG {}", PlayLayer::get()->m_player1->getPosition());
            log::debug("POS2 DEBUG {}", PlayLayer::get()->m_player2->getPosition());
         }
+        #endif
         
         
         // if (key == enumKeyCodes::KEY_J && !isKeyRepeat && isKeyDown && PlayLayer::get()) {

@@ -51,10 +51,29 @@ void Macro::recordFrameFix(int frame, PlayerObject* p1, PlayerObject* p2) {
     while (p2Rotation < 0 || p2Rotation > 360)
       p2Rotation += p2Rotation < 0 ? 360.f : -360.f;
 
+    // Extended frame data with velocity for improved accuracy
+    gdr_legacy::FrameData p1Data;
+    p1Data.pos = p1->getPosition();
+    p1Data.rotation = p1Rotation;
+    p1Data.yVelocity = p1->m_yVelocity;
+    p1Data.xVelocity = p1->m_platformerXVelocity;
+    p1Data.isDashing = p1->m_isDashing;
+    p1Data.isOnGround = p1->m_isOnGround;
+
+    gdr_legacy::FrameData p2Data;
+    if (p2) {
+        p2Data.pos = p2->getPosition();
+        p2Data.rotation = p2Rotation;
+        p2Data.yVelocity = p2->m_yVelocity;
+        p2Data.xVelocity = p2->m_platformerXVelocity;
+        p2Data.isDashing = p2->m_isDashing;
+        p2Data.isOnGround = p2->m_isOnGround;
+    }
+
     Global::get().macro.frameFixes.push_back({
       frame,
-      { p1->getPosition(), p1Rotation },
-      { p2->getPosition(), p2Rotation }
+      p1Data,
+      p2Data
     });
 }
 

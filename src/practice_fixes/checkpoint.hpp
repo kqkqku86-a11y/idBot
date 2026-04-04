@@ -177,6 +177,18 @@ struct SupplementalPlayerState {
     bool m_maybeReverseAccel = false;
     int m_groundObjectMaterial = 0;
     bool m_isOutOfBounds = false;
+    // Game mode flags (missing - caused inaccuracy)
+    bool m_isRobot = false;
+    bool m_isSpider = false;
+    bool m_isBall = false;
+    bool m_isShip = false;
+    bool m_isBird = false;
+    bool m_isDart = false;
+    bool m_isSwing = false;
+    bool m_isUpsideDown = false;
+    bool m_isSideways = false;
+    bool m_isHidden = false;
+    double m_lastFlipTime = 0.0;
 
     #ifndef GEODE_IS_ANDROID
     std::unordered_map<int, GJPointDouble> m_rotateObjectsRelated;
@@ -360,6 +372,17 @@ struct SupplementalPlayerState {
         m_unkUnused3                    = p->m_unkUnused3;
         m_groundObjectMaterial          = p->m_groundObjectMaterial;
         m_isOutOfBounds                 = p->m_isOutOfBounds;
+        m_isRobot                      = p->m_isRobot;
+        m_isSpider                     = p->m_isSpider;
+        m_isBall                       = p->m_isBall;
+        m_isShip                       = p->m_isShip;
+        m_isBird                       = p->m_isBird;
+        m_isDart                       = p->m_isDart;
+        m_isSwing                      = p->m_isSwing;
+        m_isUpsideDown                 = p->m_isUpsideDown;
+        m_isSideways                   = p->m_isSideways;
+        m_isHidden                    = p->m_isHidden;
+        m_lastFlipTime               = p->m_lastFlipTime;
 
         #ifndef GEODE_IS_ANDROID
         m_rotateObjectsRelated          = p->m_rotateObjectsRelated;
@@ -377,7 +400,17 @@ struct SupplementalPlayerState {
 
     void apply(PlayerObject* p) const {
         if (!p) return;
-        p->m_yVelocity                      = m_yVelocity;
+        // Round yVelocity to 3 decimal places to match RobTop's checkpoint load behavior
+        // (see functions.txt lines 3181-3187)
+        {
+            double dVar20 = m_yVelocity;
+            double dVar21 = (double)(int)dVar20;
+            if (dVar20 != dVar21) {
+                dVar20 = (double)round((dVar20 - dVar21) * 1000.0);
+                dVar20 = dVar20 / 1000.0 + dVar21;
+            }
+            p->m_yVelocity = dVar20;
+        }
         p->m_platformerXVelocity            = m_platformerXVelocity;
         p->m_isOnGround                     = m_isOnGround;
         p->m_lastPortalPos                  = m_lastPortalPos;
@@ -396,8 +429,8 @@ struct SupplementalPlayerState {
         p->m_stateRingJump                  = m_stateRingJump;
         p->m_touchedPad                     = m_touchedPad;
         p->m_isMoving                       = m_isMoving;
-        p->m_holdingRight                   = m_holdingRight;
-        p->m_holdingLeft                    = m_holdingLeft;
+        p->m_holdingRight                  = m_holdingRight;
+        p->m_holdingLeft                   = m_holdingLeft;
         p->m_leftPressedFirst               = m_leftPressedFirst;
         p->m_platformerMovingLeft           = m_platformerMovingLeft;
         p->m_platformerMovingRight          = m_platformerMovingRight;
@@ -544,6 +577,25 @@ struct SupplementalPlayerState {
         p->m_unkUnused3                     = m_unkUnused3;
         p->m_groundObjectMaterial           = m_groundObjectMaterial;
         p->m_isOutOfBounds                  = m_isOutOfBounds;
+        p->m_isRobot                     = m_isRobot;
+        p->m_isSpider                    = m_isSpider;
+        p->m_isBall                     = m_isBall;
+        p->m_isShip                     = m_isShip;
+        p->m_isBird                     = m_isBird;
+        p->m_isDart                     = m_isDart;
+        p->m_isSwing                    = m_isSwing;
+        p->m_isUpsideDown                 = m_isUpsideDown;
+        p->m_isSideways                  = m_isSideways;
+        p->m_isHidden                 = m_isHidden;
+        p->m_lastFlipTime              = m_lastFlipTime;
+
+        // Dash state - saved by GD's checkpoint
+        p->m_isDashing               = m_isDashing;
+        p->m_dashX                   = m_dashX;
+        p->m_dashY                   = m_dashY;
+        p->m_dashAngle               = m_dashAngle;
+        p->m_dashStartTime           = m_dashStartTime;
+        p->m_dashRing                = m_dashRing;
 
         #ifndef GEODE_IS_ANDROID
         p->m_rotateObjectsRelated           = m_rotateObjectsRelated;
@@ -568,6 +620,11 @@ struct SupplementalPlayLayerState {
     float m_unk3380 = 0.0f;
     int m_unk32d0 = 0;
     int m_unk32ec = 0;
+    // Added for improved checkpoint accuracy
+    double m_currentProgress = 0.0;
+    double m_levelTime = 0.0;
+    int m_commandIndex = 0;
+    bool m_isPaused = false;
 
     #ifndef GEODE_IS_ANDROID
     gd::unordered_map<int, GameObjectPhysics> m_gameObjectPhysics;
@@ -584,6 +641,11 @@ struct SupplementalPlayLayerState {
         m_unk3380               = pl->m_unk3380;
         m_unk32d0               = pl->m_unk32d0;
         m_unk32ec               = pl->m_unk32ec;
+        // Added for improved checkpoint accuracy
+        m_currentProgress      = pl->m_gameState.m_currentProgress;
+        m_levelTime          = pl->m_gameState.m_levelTime;
+        m_commandIndex        = pl->m_gameState.m_commandIndex;
+        m_isPaused           = pl->m_isPaused;
 
         #ifndef GEODE_IS_ANDROID
         m_gameObjectPhysics     = pl->m_gameState.m_gameObjectPhysics;
@@ -599,6 +661,11 @@ struct SupplementalPlayLayerState {
         pl->m_unk3380               = m_unk3380;
         pl->m_unk32d0               = m_unk32d0;
         pl->m_unk32ec               = m_unk32ec;
+        // Added for improved checkpoint accuracy
+        pl->m_gameState.m_currentProgress = m_currentProgress;
+        pl->m_gameState.m_levelTime = m_levelTime;
+        pl->m_gameState.m_commandIndex = m_commandIndex;
+        pl->m_isPaused             = m_isPaused;
 
         #ifndef GEODE_IS_ANDROID
         pl->m_gameState.m_gameObjectPhysics = m_gameObjectPhysics;

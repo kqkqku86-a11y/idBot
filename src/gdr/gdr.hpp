@@ -48,6 +48,11 @@ namespace gdr_legacy {
         cocos2d::CCPoint pos = { 0.f, 0.f };
         float rotation = 0.f;
         bool rotate = true;
+        // Added for improved accuracy
+        double yVelocity = 0.0;
+        double xVelocity = 0.0;
+        bool isDashing = false;
+        bool isOnGround = false;
     };
     
     struct FrameFix {
