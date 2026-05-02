@@ -30,8 +30,8 @@ class ButtonEditLayer : public geode::Popup {
     Mod *mod = nullptr;
     CCMenu *menu = nullptr;
 
-    SliderNode *scaleSlider = nullptr;
-    SliderNode *opacitySlider = nullptr;
+    Slider *scaleSlider = nullptr;
+    Slider *opacitySlider = nullptr;
 
     CCLabelBMFont *scaleLbl = nullptr;
     CCLabelBMFont *opacityLbl = nullptr;
@@ -55,6 +55,10 @@ class ButtonEditLayer : public geode::Popup {
                       cocos2d::CCEvent *event) override;
 
     void updateSelectedLabels();
+
+    void updateScale(CCObject*);
+
+    void updateOpacity(CCObject*);
 
     void updateSelected(std::string selected);
 

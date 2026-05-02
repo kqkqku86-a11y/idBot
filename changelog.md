@@ -1,3 +1,15 @@
+# v2.6.0
+* Renderer is now cross-platform, with one pass audio (meaning both video and audio will be recorded on the same attempt!)
+* Rewrite TPS bypass and make it compatible with Eclipse.
+* Rewrite practice fixes, hopefully bot is more accurate now (this update also includes a proper hold restore!).
+* Remove 2 delay frame, report on xdBot Discord server if this change causes side effects.
+* Code cleanup.
+* Fix some crashes.
+* Fix playing macros recorded before 2.2081.
+* Load macro UI should now show macro file creation date on all platforms.
+* Some fixes specifically for macOS.
+* Allow Click on Steps while recording/playing (does not actually affect the bot itself)
+
 # v2.5.0
 * Geode v5 support.
 * Cross-platform support. (Windows, macOS, Android, iOS, renderer is Windows only, mobile coming soon)

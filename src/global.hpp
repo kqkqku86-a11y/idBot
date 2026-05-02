@@ -1,7 +1,6 @@
 #pragma once
 
 #include "macro.hpp"
-#include "practice_fixes/practice_fixes.hpp"
 #include "renderer/renderer.hpp"
 #include <Geode/Geode.hpp>
 #include <eclipse.eclipse-menu/include/config.hpp>
@@ -22,32 +21,22 @@ class Global {
         return instance;
     }
 
-    // @brief Determine whether an incompatible mod or an incompatible setting
-    // in a mod is enabled
     static bool hasIncompatibleMods();
 
-    // @brief Determine whether an incompatible Geometry Dash setting is enabled
     static bool enabledIncompatibleGDSettings();
 
-    // @brief Get the TPS value set in the mod
     static float getTPS();
 
-    // @brief Get the current frame in the gameplay
     static int getCurrentFrame(bool editor = false);
 
-    // @brief Update the RNG seed
     static void updateSeed(bool isRestart = false);
 
-    // @brief Update audio pitch
     static void updatePitch(float value);
 
-    // @brief Toggle, well, speedhack
     static void toggleSpeedhack();
 
-    // @brief Step a frame
     static void frameStep();
 
-    // @brief Toggle, well, frame stepper
     static void toggleFrameStepper();
 
     Mod* mod = geode::Mod::get();
@@ -103,30 +92,30 @@ class Global {
     float tps = 240.f;
 
     std::vector<geode::Function<void(bool)>> onTpsEnabledChanged;
-std::vector<geode::Function<void(double)>> onTpsChanged;
+    std::vector<geode::Function<void(double)>> onTpsChanged;
 
-void setTpsEnabled(bool enabled) {
-    tpsEnabled = enabled;
-    mod->setSavedValue("macro_tps_enabled", enabled);
+    void setTpsEnabled(bool enabled) {
+        tpsEnabled = enabled;
+        mod->setSavedValue("macro_tps_enabled", enabled);
 
-    if (Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
-        eclipse::config::setInternal("global.tpsbypass.toggle", enabled);
-    } else {
-        for (auto& cb : onTpsEnabledChanged)
-            cb(enabled);
+        if (Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
+            eclipse::config::setInternal("global.tpsbypass.toggle", enabled);
+        } else {
+            for (auto& cb : onTpsEnabledChanged)
+                cb(enabled);
+        }
     }
-}
 
-void setTps(float newTps) {
-    tps = newTps;
-    mod->setSavedValue("macro_tps", static_cast<double>(newTps));
-    if (Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
-        eclipse::config::setInternal("global.tpsbypass", static_cast<double>(newTps));
-    } else {
-        for (auto& cb : onTpsChanged)
-            cb(static_cast<double>(newTps));
+    void setTps(float newTps) {
+        tps = newTps;
+        mod->setSavedValue("macro_tps", static_cast<double>(newTps));
+        if (Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
+            eclipse::config::setInternal("global.tpsbypass", static_cast<double>(newTps));
+        } else {
+            for (auto& cb : onTpsChanged)
+                cb(static_cast<double>(newTps));
+        }
     }
-}
 
     bool previousTpsEnabled = false;
     float previousTps = 0.f;

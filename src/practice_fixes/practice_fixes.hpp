@@ -1,6 +1,7 @@
 // practice_fixes.hpp
 #pragma once
 #include "../includes.hpp"
+#include "../global.hpp"
 #include "../macro.hpp"
 #include "checkpoint.hpp"
 #include <Geode/modify/PlayLayer.hpp>
@@ -8,35 +9,44 @@
 using namespace geode::prelude;
 
 class PracticeFix {
-    public:
+  public:
     static bool shouldEnable() {
-        PlayLayer* pl = PlayLayer::get();
-        if (!pl || !pl->m_isPracticeMode) return false;
-        
-        return false;
+        auto& g = Global::get();
+        auto* pl = PlayLayer::get();
+
+        if (!pl)
+            return false;
+
+        if (!pl->m_isPracticeMode)
+            return false;
+
+        return g.state == state::recording || g.state == state::playing;
     }
 };
 
 class PlayerPracticeFixes {
-    public:
+  public:
     struct SavedState {
         SupplementalPlayerState supplemental;
     };
-    
+
     static SavedState saveData(PlayerObject* p) {
         SavedState s;
-        if (!p) return s;
+        if (!p)
+            return s;
         s.supplemental = SupplementalPlayerState(p);
         return s;
     }
-    
+
     static void applyData(PlayerObject* p, const SavedState& s) {
-        if (!p) return;
+        if (!p)
+            return;
         s.supplemental.apply(p);
     }
-    
+
     static void transfer(PlayerObject* from, PlayerObject* to, bool applyPos) {
-        if (!from || !to) return;
+        if (!from || !to)
+            return;
         SavedState s = saveData(from);
         if (applyPos) {
             to->setPosition(from->getPosition());

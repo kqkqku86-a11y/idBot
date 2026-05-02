@@ -375,82 +375,82 @@ class $modify(BGLHook, GJBaseGameLayer) {
         if (g.state == state::playing) {
             if (g.mod->getSavedValue<bool>("macro_ignore_inputs") && !m_fields->macroInput)
                 return;
-            else
-                return GJBaseGameLayer::handleButton(hold, button, player2);
 
-            int frame = Global::getCurrentFrame();
+            return GJBaseGameLayer::handleButton(hold, button, player2);
+        }
 
-            if (frame >= 10 && hold)
-                Global::hasIncompatibleMods();
+        int frame = Global::getCurrentFrame();
 
-            if (g.state != state::recording)
-                return GJBaseGameLayer::handleButton(hold, button, player2);
+        if (frame >= 10 && hold)
+            Global::hasIncompatibleMods();
 
-            if (g.inputFixes)
-                g.macro.recordFrameFix(frame, m_player1, m_player2);
+        if (g.state != state::recording)
+            return GJBaseGameLayer::handleButton(hold, button, player2);
+
+        if (g.inputFixes)
+            g.macro.recordFrameFix(frame, m_player1, m_player2);
 
 #ifdef GEODE_IS_MOBILE
-            m_allowedButtons.clear(); // mobile swift click patch bypass
+        m_allowedButtons.clear();
 #endif
 
-            GJBaseGameLayer::handleButton(hold, button, player2);
+        GJBaseGameLayer::handleButton(hold, button, player2);
 
-            if (!m_levelSettings->m_twoPlayerMode)
-                player2 = false;
+        if (!m_levelSettings->m_twoPlayerMode)
+            player2 = false;
 
-            if (!g.ignoreRecordAction && !g.creatingTrajectory && !m_player1->m_isDead) {
-                int idx = buttonIndex[player2 ? 1 : 0].at(button);
+        if (!g.ignoreRecordAction && !g.creatingTrajectory && !m_player1->m_isDead) {
+            g.macro.recordAction(frame, button, player2, hold);
 
-                g.macro.recordAction(frame, button, player2, hold);
-                if (g.p2mirror && m_gameState.m_isDualMode)
-                    g.macro.recordAction(
-                        frame,
-                        button,
-                        !player2,
-                        g.mod->getSavedValue<bool>("p2_input_mirror_inverted") ? !hold : hold);
-            }
+            if (g.p2mirror && m_gameState.m_isDualMode)
+                g.macro.recordAction(frame,
+                                     button,
+                                     !player2,
+                                     g.mod->getSavedValue<bool>("p2_input_mirror_inverted") ? !hold
+                                                                                            : hold);
         }
-    };
+    }
+};
 
-    class $modify(PauseLayer) {
+class $modify(PauseLayer) {
 
-        void onPracticeMode(CCObject* sender) {
-            PauseLayer::onPracticeMode(sender);
-            if (Global::get().state != state::none)
-                PlayLayer::get()->resetLevel();
+    void onPracticeMode(CCObject* sender) {
+        PauseLayer::onPracticeMode(sender);
+        if (Global::get().state != state::none)
+            PlayLayer::get()->resetLevel();
+    }
+
+    void onNormalMode(CCObject* sender) {
+        PauseLayer::onNormalMode(sender);
+        auto& g = Global::get();
+        g.checkpoints.clear();
+        if (g.restart) {
+            if (PlayLayer* pl = PlayLayer::get())
+                pl->resetLevel();
         }
+    }
 
-        void onNormalMode(CCObject* sender) {
-            PauseLayer::onNormalMode(sender);
+    void onQuit(CCObject* sender) {
+        PauseLayer::onQuit(sender);
+        Macro::resetState();
+        Loader::get()->queueInMainThread([] {
             auto& g = Global::get();
-            g.checkpoints.clear();
-            if (g.restart) {
-                if (PlayLayer* pl = PlayLayer::get())
-                    pl->resetLevel();
-            }
-        }
-
-        void onQuit(CCObject* sender) {
-            PauseLayer::onQuit(sender);
-            Macro::resetState();
-            Loader::get()->queueInMainThread([] {
-                auto& g = Global::get();
 #ifndef GEODE_IS_IOS
-                if (g.renderer.recording)
-                    g.renderer.stop();
+            if (g.renderer.recording)
+                g.renderer.stop();
 #endif
-            });
-        }
+        });
+    }
 
-        void goEdit() {
-            PauseLayer::goEdit();
-            Macro::resetState();
-            Loader::get()->queueInMainThread([] {
-                auto& g = Global::get();
+    void goEdit() {
+        PauseLayer::goEdit();
+        Macro::resetState();
+        Loader::get()->queueInMainThread([] {
+            auto& g = Global::get();
 #ifndef GEODE_IS_IOS
-                if (g.renderer.recording)
-                    g.renderer.stop();
+            if (g.renderer.recording)
+                g.renderer.stop();
 #endif
-            });
-        }
-    };
+        });
+    }
+};

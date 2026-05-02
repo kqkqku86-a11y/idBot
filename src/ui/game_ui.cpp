@@ -62,43 +62,40 @@ void Interface::addLabels(PlayLayer *pl) {
 }
 
 void Interface::addButtons(PlayLayer *pl) {
-    auto stepBtn =
-        Button::createWithSpriteFrameName("GJ_arrow_02_001.png", [](auto) {
-            if (!Global::get().frameStepper)
-                Global::toggleFrameStepper();
-            else
-                Global::frameStep();
-        });
-    CCSprite *stepSprite = static_cast<CCSprite *>(stepBtn->getDisplayNode());
-    stepSprite->setFlipX(true);
-    stepSprite->setPosition({0, 0});
+    CCMenu* menu = CCMenu::create();
+    menu->setZOrder(300);
+    menu->setPosition({0, 0});
+    menu->setID("button-menu"_spr);
+    pl->addChild(menu);
+
+    auto stepBtn = Button::createWithSpriteFrameName("GJ_arrow_02_001.png", [](auto) {
+        if (!Global::get().frameStepper)
+            Global::toggleFrameStepper();
+        else
+            Global::frameStep();
+    });
+    static_cast<CCSprite*>(stepBtn->getDisplayNode())->setFlipX(true);
+    static_cast<CCSprite*>(stepBtn->getDisplayNode())->setPosition({0, 0});
     stepBtn->setAnchorPoint({0, 0});
     stepBtn->setID("step-frame-btn"_spr);
+    menu->addChild(stepBtn);
 
-    pl->m_uiLayer->addChild(stepBtn);
-
-    auto disableStepperBtn =
-        Button::createWithSpriteFrameName("GJ_deleteIcon_001.png", [](auto) {
-            if (Global::get().frameStepper)
-                Global::toggleFrameStepper();
-        });
-    CCSprite *disableSprite =
-        static_cast<CCSprite *>(disableStepperBtn->getDisplayNode());
-    disableStepperBtn->setID("disable-stepper-btn"_spr);
+    auto disableStepperBtn = Button::createWithSpriteFrameName("GJ_deleteIcon_001.png", [](auto) {
+        if (Global::get().frameStepper)
+            Global::toggleFrameStepper();
+    });
+    static_cast<CCSprite*>(disableStepperBtn->getDisplayNode())->setPosition({0, 0});
     disableStepperBtn->setAnchorPoint({0, 0});
-    disableSprite->setPosition({0, 0});
+    disableStepperBtn->setID("disable-stepper-btn"_spr);
+    menu->addChild(disableStepperBtn);
 
-    pl->m_uiLayer->addChild(disableStepperBtn);
-
-    auto speedHackBtn = Button::createWithSpriteFrameName(
-        "GJ_timeIcon_001.png", [](auto) { Global::toggleSpeedhack(); });
-    CCSprite *speedHackSprite =
-        static_cast<CCSprite *>(speedHackBtn->getDisplayNode());
+    auto speedHackBtn = Button::createWithSpriteFrameName("GJ_timeIcon_001.png", [](auto) {
+        Global::toggleSpeedhack();
+    });
+    static_cast<CCSprite*>(speedHackBtn->getDisplayNode())->setPosition({0, 0});
     speedHackBtn->setAnchorPoint({0, 0});
     speedHackBtn->setID("speedhack-btn"_spr);
-    speedHackSprite->setPosition({0, 0});
-
-    pl->m_uiLayer->addChild(speedHackBtn);
+    menu->addChild(speedHackBtn);
 
     Interface::updateButtons();
 }
@@ -155,6 +152,9 @@ void Interface::updateButtons() {
     if (!pl)
         return;
 
+    CCNode* menu = pl->getChildByID("button-menu"_spr);
+    if (!menu) return;
+
     auto &g = Global::get();
 
 #ifdef GEODE_IS_DESKTOP
@@ -163,10 +163,9 @@ void Interface::updateButtons() {
     bool isDesktop = false;
 #endif
 
-    CCNode *disableStepperBtn =
-        pl->m_uiLayer->getChildByID("disable-stepper-btn"_spr);
-    CCNode *stepFrameBtn = pl->m_uiLayer->getChildByID("step-frame-btn"_spr);
-    CCNode *speedhackBtn = pl->m_uiLayer->getChildByID("speedhack-btn"_spr);
+    CCNode *disableStepperBtn = menu->getChildByID("disable-stepper-btn"_spr);
+    CCNode *stepFrameBtn = menu->getChildByID("step-frame-btn"_spr);
+    CCNode *speedhackBtn = menu->getChildByID("speedhack-btn"_spr);
 
     disableStepperBtn->setPosition(
         ccp(g.mod->getSavedValue<float>("button_off_pos_x"),
@@ -181,8 +180,7 @@ void Interface::updateButtons() {
     sprite->setAnchorPoint({0, 0});
 
     cocos2d::CCSize size = sprite->getContentSize();
-    disableStepperBtn->setContentSize(
-        {size.width * scale, size.height * scale});
+    disableStepperBtn->setContentSize({size.width * scale, size.height * scale});
 
     stepFrameBtn->setPosition(
         ccp(g.mod->getSavedValue<float>("button_advance_frame_pos_x"),
@@ -197,7 +195,7 @@ void Interface::updateButtons() {
     sprite->setAnchorPoint({0, 0});
 
     size = sprite->getContentSize();
-    speedhackBtn->setContentSize({size.width * scale, size.height * scale});
+    stepFrameBtn->setContentSize({size.width * scale, size.height * scale});
 
     speedhackBtn->setPosition(
         ccp(g.mod->getSavedValue<float>("button_speedhack_pos_x"),
@@ -220,7 +218,6 @@ void Interface::updateButtons() {
         disableStepperBtn->setVisible(false);
         stepFrameBtn->setVisible(false);
         speedhackBtn->setVisible(false);
-
         return;
     }
 

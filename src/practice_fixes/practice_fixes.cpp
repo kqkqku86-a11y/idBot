@@ -11,8 +11,7 @@ struct PracticeCheckpointData {
     SupplementalPlayLayerState pl;
 
     PracticeCheckpointData() = default;
-    PracticeCheckpointData(PlayerObject *p1Obj, PlayerObject *p2Obj,
-                           PlayLayer *plObj) {
+    PracticeCheckpointData(PlayerObject* p1Obj, PlayerObject* p2Obj, PlayLayer* plObj) {
         if (!plObj || !p1Obj)
             return;
         pl = SupplementalPlayLayerState(plObj);
@@ -21,8 +20,7 @@ struct PracticeCheckpointData {
             p2 = SupplementalPlayerState(p2Obj);
     }
 
-    void apply(PlayerObject *p1Obj, PlayerObject *p2Obj,
-               PlayLayer *plObj) const {
+    void apply(PlayerObject* p1Obj, PlayerObject* p2Obj, PlayLayer* plObj) const {
         if (!plObj)
             return;
         pl.apply(plObj);
@@ -35,14 +33,11 @@ struct PracticeCheckpointData {
 
 class $modify(FixPlayLayer, PlayLayer) {
     struct Fields {
-        std::unordered_map<CheckpointObject *, PracticeCheckpointData>
-            m_checkpoints;
-        std::unordered_map<CheckpointObject *, std::vector<input>>
-            m_checkpointInputs;
-        std::unordered_map<CheckpointObject *,
-                           std::vector<gdr_legacy::FrameFix>>
+        std::unordered_map<CheckpointObject*, PracticeCheckpointData> m_checkpoints;
+        std::unordered_map<CheckpointObject*, std::vector<input>> m_checkpointInputs;
+        std::unordered_map<CheckpointObject*, std::vector<gdr_legacy::FrameFix>>
             m_checkpointFrameFixes;
-        std::unordered_map<CheckpointObject *, int> m_checkpointFrames;
+        std::unordered_map<CheckpointObject*, int> m_checkpointFrames;
         bool m_suppressPushButtonSideEffects = false;
         SupplementalPlayerState m_pendingRestoreP1;
         SupplementalPlayerState m_pendingRestoreP2;
@@ -50,11 +45,10 @@ class $modify(FixPlayLayer, PlayLayer) {
         std::map<int, bool> m_physicallyHeldP2;
     };
 
-    void loadFromCheckpoint(CheckpointObject *checkpoint) {
-        auto *fields = m_fields.self();
-        auto &g = Global::get();
-        bool wasRecordingOrPlaying =
-            (g.state == state::recording || g.state == state::playing);
+    void loadFromCheckpoint(CheckpointObject* checkpoint) {
+        auto* fields = m_fields.self();
+        auto& g = Global::get();
+        bool wasRecordingOrPlaying = (g.state == state::recording || g.state == state::playing);
         bool shouldFix = PracticeFix::shouldEnable();
 
         if (shouldFix) {
@@ -74,9 +68,7 @@ class $modify(FixPlayLayer, PlayLayer) {
         if (shouldFix) {
             auto it = fields->m_checkpoints.find(checkpoint);
             if (it != fields->m_checkpoints.end()) {
-                it->second.apply(m_player1,
-                                 m_gameState.m_isDualMode ? m_player2 : nullptr,
-                                 this);
+                it->second.apply(m_player1, m_gameState.m_isDualMode ? m_player2 : nullptr, this);
                 fields->m_physicallyHeldP1 = physP1;
                 fields->m_physicallyHeldP2 = physP2;
                 fields->m_suppressPushButtonSideEffects = true;
@@ -102,41 +94,35 @@ class $modify(FixPlayLayer, PlayLayer) {
 
                     if (g.state == state::recording) {
                         auto sizeBefore = g.macro.inputs.size();
-                        g.macro.inputs.erase(
-                            std::remove_if(g.macro.inputs.begin(),
-                                           g.macro.inputs.end(),
-                                           [targetFrame](const input &inp) {
-                                               return inp.frame >= targetFrame;
-                                           }),
-                            g.macro.inputs.end());
+                        g.macro.inputs.erase(std::remove_if(g.macro.inputs.begin(),
+                                                            g.macro.inputs.end(),
+                                                            [targetFrame](const input& inp) {
+                                                                return inp.frame >= targetFrame;
+                                                            }),
+                                             g.macro.inputs.end());
                     }
 
                     g.currentAction = 0;
                     while (g.currentAction < g.macro.inputs.size() &&
-                           g.macro.inputs[g.currentAction].frame <
-                               targetFrame) {
+                           g.macro.inputs[g.currentAction].frame < targetFrame) {
                         g.currentAction++;
                     }
                     g.currentFrameFix = 0;
                     while (g.currentFrameFix < g.macro.frameFixes.size() &&
-                           g.macro.frameFixes[g.currentFrameFix].frame <
-                               targetFrame) {
+                           g.macro.frameFixes[g.currentFrameFix].frame < targetFrame) {
                         g.currentFrameFix++;
                     }
 
                 } else {
 
                     if (g.state == state::recording) {
-                        auto fixIt =
-                            fields->m_checkpointFrameFixes.find(checkpoint);
+                        auto fixIt = fields->m_checkpointFrameFixes.find(checkpoint);
                         if (fixIt != fields->m_checkpointFrameFixes.end()) {
                             g.macro.frameFixes = fixIt->second;
                             int targetFrame = g.m_frameCount - g.frameOffset;
                             g.currentFrameFix = 0;
-                            while (g.currentFrameFix <
-                                       g.macro.frameFixes.size() &&
-                                   g.macro.frameFixes[g.currentFrameFix].frame <
-                                       targetFrame) {
+                            while (g.currentFrameFix < g.macro.frameFixes.size() &&
+                                   g.macro.frameFixes[g.currentFrameFix].frame < targetFrame) {
                                 g.currentFrameFix++;
                             }
                         }
@@ -148,31 +134,30 @@ class $modify(FixPlayLayer, PlayLayer) {
         }
     }
 
-    CheckpointObject *createCheckpoint() {
+    CheckpointObject* createCheckpoint() {
         bool shouldFix = PracticeFix::shouldEnable();
-        auto *checkpoint = PlayLayer::createCheckpoint();
+        auto* checkpoint = PlayLayer::createCheckpoint();
 
         if (!checkpoint)
             return checkpoint;
 
         if (shouldFix) {
-            auto *fields = m_fields.self();
+            auto* fields = m_fields.self();
             fields->m_checkpoints[checkpoint] = PracticeCheckpointData(
-                m_player1, m_gameState.m_isDualMode ? m_player2 : nullptr,
-                this);
+                m_player1, m_gameState.m_isDualMode ? m_player2 : nullptr, this);
 
-            auto &saved = fields->m_checkpoints[checkpoint];
+            auto& saved = fields->m_checkpoints[checkpoint];
 
-            saved.p1.m_jumpHeld = fields->m_physicallyHeldP1.count(1) &&
-                                  fields->m_physicallyHeldP1.at(1);
+            saved.p1.m_jumpHeld =
+                fields->m_physicallyHeldP1.count(1) && fields->m_physicallyHeldP1.at(1);
             if (m_gameState.m_isDualMode)
-                saved.p2.m_jumpHeld = fields->m_physicallyHeldP2.count(1) &&
-                                      fields->m_physicallyHeldP2.at(1);
+                saved.p2.m_jumpHeld =
+                    fields->m_physicallyHeldP2.count(1) && fields->m_physicallyHeldP2.at(1);
         }
 
-        auto &g = Global::get();
+        auto& g = Global::get();
         if (g.state == state::recording || g.state == state::playing) {
-            auto *fields = m_fields.self();
+            auto* fields = m_fields.self();
             g.ignoreRecordAction = true;
             fields->m_checkpointInputs[checkpoint] = g.macro.inputs;
             fields->m_checkpointFrameFixes[checkpoint] = g.macro.frameFixes;
@@ -183,10 +168,10 @@ class $modify(FixPlayLayer, PlayLayer) {
         return checkpoint;
     }
 
-    void removeCheckpoint(CheckpointObject *checkpoint) {
+    void removeCheckpoint(CheckpointObject* checkpoint) {
         PlayLayer::removeCheckpoint(checkpoint);
 
-        auto *fields = m_fields.self();
+        auto* fields = m_fields.self();
         fields->m_checkpoints.erase(checkpoint);
         fields->m_checkpointInputs.erase(checkpoint);
         fields->m_checkpointFrameFixes.erase(checkpoint);
@@ -197,7 +182,7 @@ class $modify(FixPlayLayer, PlayLayer) {
         bool hadCheckpoints = m_checkpointArray->count() > 0;
 
         if (!hadCheckpoints) {
-            auto *fields = m_fields.self();
+            auto* fields = m_fields.self();
             fields->m_checkpoints.clear();
             fields->m_checkpointInputs.clear();
             fields->m_checkpointFrameFixes.clear();
@@ -215,32 +200,28 @@ class $modify(FixPlayLayer, PlayLayer) {
 // hook was the solution!
 class $modify(FixGJBaseGameLayer, GJBaseGameLayer) {
     void handleButton(bool down, int button, bool isPlayer1) {
-        auto *pl = PlayLayer::get();
+        auto* pl = PlayLayer::get();
+        bool shouldFix = PracticeFix::shouldEnable();
+
         if (pl) {
-            auto *fields = static_cast<FixPlayLayer *>(pl)->m_fields.self();
-            auto &physHeld = isPlayer1 ? fields->m_physicallyHeldP1
-                                       : fields->m_physicallyHeldP2;
+            auto* fields = static_cast<FixPlayLayer*>(pl)->m_fields.self();
+            auto& physHeld = isPlayer1 ? fields->m_physicallyHeldP1 : fields->m_physicallyHeldP2;
             physHeld[button] = down;
         }
 
-        if (!down) {
+        if (!shouldFix || !pl || !down) {
             GJBaseGameLayer::handleButton(down, button, isPlayer1);
             return;
         }
 
-        if (!pl) {
-            GJBaseGameLayer::handleButton(down, button, isPlayer1);
-            return;
-        }
-
-        auto *fields = static_cast<FixPlayLayer *>(pl)->m_fields.self();
+        auto* fields = static_cast<FixPlayLayer*>(pl)->m_fields.self();
 
         if (!fields->m_suppressPushButtonSideEffects) {
             GJBaseGameLayer::handleButton(down, button, isPlayer1);
             return;
         }
 
-        const SupplementalPlayerState &saved =
+        const SupplementalPlayerState& saved =
             isPlayer1 ? fields->m_pendingRestoreP1 : fields->m_pendingRestoreP2;
 
         bool wasHeld = false;
@@ -265,36 +246,41 @@ class $modify(FixGJBaseGameLayer, GJBaseGameLayer) {
     void processQueuedButtons(float dt, bool clearInputQueue) {
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
-        auto *pl = PlayLayer::get();
+        auto* pl = PlayLayer::get();
         if (!pl)
             return;
 
-        auto *fields = static_cast<FixPlayLayer *>(pl)->m_fields.self();
+        auto* fields = static_cast<FixPlayLayer*>(pl)->m_fields.self();
         if (!fields->m_suppressPushButtonSideEffects)
             return;
 
         fields->m_suppressPushButtonSideEffects = false;
 
-        auto clearIfNotHeld = [&](PlayerObject *player,
-                                  const SupplementalPlayerState &saved,
-                                  bool isP1) {
-            if (!player)
-                return;
-            auto &phys =
-                isP1 ? fields->m_physicallyHeldP1 : fields->m_physicallyHeldP2;
+        bool shouldFix = PracticeFix::shouldEnable();
+        if (!shouldFix) {
+            fields->m_pendingRestoreP1 = {};
+            fields->m_pendingRestoreP2 = {};
+            return;
+        }
 
-            auto isHeld = [&](int btn) {
-                auto it = phys.find(btn);
-                return it != phys.end() && it->second;
+        auto clearIfNotHeld =
+            [&](PlayerObject* player, const SupplementalPlayerState& saved, bool isP1) {
+                if (!player)
+                    return;
+                auto& phys = isP1 ? fields->m_physicallyHeldP1 : fields->m_physicallyHeldP2;
+
+                auto isHeld = [&](int btn) {
+                    auto it = phys.find(btn);
+                    return it != phys.end() && it->second;
+                };
+
+                if (saved.m_holdingLeft && !isHeld(2))
+                    GJBaseGameLayer::handleButton(false, 2, isP1);
+                if (saved.m_holdingRight && !isHeld(3))
+                    GJBaseGameLayer::handleButton(false, 3, isP1);
+                if (saved.m_jumpHeld && !isHeld(1))
+                    GJBaseGameLayer::handleButton(false, 1, isP1);
             };
-
-            if (saved.m_holdingLeft && !isHeld(2))
-                GJBaseGameLayer::handleButton(false, 2, isP1);
-            if (saved.m_holdingRight && !isHeld(3))
-                GJBaseGameLayer::handleButton(false, 3, isP1);
-            if (saved.m_jumpHeld && !isHeld(1))
-                GJBaseGameLayer::handleButton(false, 1, isP1);
-        };
 
         clearIfNotHeld(pl->m_player1, fields->m_pendingRestoreP1, true);
         clearIfNotHeld(pl->m_player2, fields->m_pendingRestoreP2, false);

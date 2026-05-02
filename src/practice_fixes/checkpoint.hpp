@@ -23,8 +23,7 @@ struct SupplementalPlayerState {
     bool m_isRotating = false;
     bool m_isBallRotating = false;
     bool m_isBallRotating2 = false;
-    bool m_jumpBuffered = false;
-    bool m_jumpHeld     = false;
+    bool m_jumpHeld = false;
     bool m_stateRingJump = false;
     bool m_touchedPad = false;
     bool m_isMoving = false;
@@ -189,6 +188,11 @@ struct SupplementalPlayerState {
     bool m_isSideways = false;
     bool m_isHidden = false;
     double m_lastFlipTime = 0.0;
+    bool m_hasGlow = false;
+    int m_dashFireFrame = 0;
+    double m_positionX = 0.0;
+    double m_positionY = 0.0;
+    float m_rotation = 0.0f;
 
     #ifndef GEODE_IS_ANDROID
     std::unordered_map<int, GJPointDouble> m_rotateObjectsRelated;
@@ -220,7 +224,6 @@ struct SupplementalPlayerState {
         m_isRotating                    = p->m_isRotating;
         m_isBallRotating                = p->m_isBallRotating;
         m_isBallRotating2               = p->m_isBallRotating2;
-        m_jumpBuffered                  = p->m_jumpBuffered;
         m_stateRingJump                 = p->m_stateRingJump;
         m_touchedPad                    = p->m_touchedPad;
         m_isMoving                      = p->m_isMoving;
@@ -242,7 +245,7 @@ struct SupplementalPlayerState {
         m_lastCollisionBottom           = p->m_lastCollisionBottom;
         m_lastCollisionTop              = p->m_lastCollisionTop;
         m_lastCollisionLeft             = p->m_lastCollisionLeft;
-        m_lastCollisionRight            = p->m_lastCollisionRight;
+        m_lastCollisionRight             = p->m_lastCollisionRight;
         m_unk50C                        = p->m_unk50C;
         m_unk510                        = p->m_unk510;
         m_currentSlope2                 = p->m_currentSlope2;
@@ -372,17 +375,22 @@ struct SupplementalPlayerState {
         m_unkUnused3                    = p->m_unkUnused3;
         m_groundObjectMaterial          = p->m_groundObjectMaterial;
         m_isOutOfBounds                 = p->m_isOutOfBounds;
-        m_isRobot                      = p->m_isRobot;
-        m_isSpider                     = p->m_isSpider;
-        m_isBall                       = p->m_isBall;
-        m_isShip                       = p->m_isShip;
-        m_isBird                       = p->m_isBird;
-        m_isDart                       = p->m_isDart;
-        m_isSwing                      = p->m_isSwing;
-        m_isUpsideDown                 = p->m_isUpsideDown;
-        m_isSideways                   = p->m_isSideways;
-        m_isHidden                    = p->m_isHidden;
-        m_lastFlipTime               = p->m_lastFlipTime;
+        m_isRobot                       = p->m_isRobot;
+        m_isSpider                      = p->m_isSpider;
+        m_isBall                        = p->m_isBall;
+        m_isShip                        = p->m_isShip;
+        m_isBird                        = p->m_isBird;
+        m_isDart                        = p->m_isDart;
+        m_isSwing                       = p->m_isSwing;
+        m_isUpsideDown                  = p->m_isUpsideDown;
+        m_isSideways                    = p->m_isSideways;
+        m_isHidden                      = p->m_isHidden;
+        m_lastFlipTime                  = p->m_lastFlipTime;
+        m_hasGlow                       = p->m_hasGlow;
+        m_dashFireFrame                 = p->m_dashFireFrame;
+        m_positionX                     = p->m_positionX;
+        m_positionY                     = p->m_positionY;
+        m_rotation                      = p->getRotation();
 
         #ifndef GEODE_IS_ANDROID
         m_rotateObjectsRelated          = p->m_rotateObjectsRelated;
@@ -411,12 +419,12 @@ struct SupplementalPlayerState {
         p->m_rotationSpeed                  = m_rotationSpeed;
         p->m_isBallRotating                 = m_isBallRotating;
         p->m_isBallRotating2                = m_isBallRotating2;
-        p->m_jumpBuffered                   = m_jumpBuffered;
         p->m_stateRingJump                  = m_stateRingJump;
         p->m_touchedPad                     = m_touchedPad;
         p->m_isMoving                       = m_isMoving;
-        p->m_holdingRight                  = m_holdingRight;
-        p->m_holdingLeft                   = m_holdingLeft;
+        p->m_holdingRight                   = m_holdingRight;
+        p->m_holdingLeft                    = m_holdingLeft;
+        p->m_isDashing                      = m_isDashing;
         p->m_leftPressedFirst               = m_leftPressedFirst;
         p->m_platformerMovingLeft           = m_platformerMovingLeft;
         p->m_platformerMovingRight          = m_platformerMovingRight;
@@ -562,18 +570,24 @@ struct SupplementalPlayerState {
         p->m_shipRotation                   = m_shipRotation;
         p->m_unkUnused3                     = m_unkUnused3;
         p->m_groundObjectMaterial           = m_groundObjectMaterial;
+        p->m_dashRing                       = m_dashRing;
         p->m_isOutOfBounds                  = m_isOutOfBounds;
-        p->m_isRobot                     = m_isRobot;
-        p->m_isSpider                    = m_isSpider;
-        p->m_isBall                     = m_isBall;
-        p->m_isShip                     = m_isShip;
-        p->m_isBird                     = m_isBird;
-        p->m_isDart                     = m_isDart;
-        p->m_isSwing                    = m_isSwing;
-        p->m_isUpsideDown                 = m_isUpsideDown;
-        p->m_isSideways                  = m_isSideways;
-        p->m_isHidden                 = m_isHidden;
-        p->m_lastFlipTime              = m_lastFlipTime;
+        p->m_isRobot                        = m_isRobot;
+        p->m_isSpider                       = m_isSpider;
+        p->m_isBall                         = m_isBall;
+        p->m_isShip                         = m_isShip;
+        p->m_isBird                         = m_isBird;
+        p->m_isDart                         = m_isDart;
+        p->m_isSwing                        = m_isSwing;
+        p->m_isUpsideDown                   = m_isUpsideDown;
+        p->m_isSideways                     = m_isSideways;
+        p->m_isHidden                       = m_isHidden;
+        p->m_lastFlipTime                   = m_lastFlipTime;
+        p->m_hasGlow                       = m_hasGlow;
+        p->m_dashFireFrame                  = m_dashFireFrame;
+        p->m_positionX                     = m_positionX;
+        p->m_positionY                     = m_positionY;
+        p->setRotation(m_rotation);
 
         #ifndef GEODE_IS_ANDROID
         p->m_rotateObjectsRelated           = m_rotateObjectsRelated;
@@ -582,6 +596,9 @@ struct SupplementalPlayerState {
         p->m_jumpPadRelated                 = m_jumpPadRelated;
         p->m_playerFollowFloats             = m_playerFollowFloats;
         p->m_currentRobotAnimation          = m_currentRobotAnimation;
+        p->m_touchingRings->removeAllObjects();
+        for (CCObject* obj : m_touchingRings)
+            p->m_touchingRings->addObject(obj);
         #endif
     }
 };
@@ -612,8 +629,8 @@ struct SupplementalPlayLayerState {
         m_unk3380               = pl->m_unk3380;
         m_unk32d0               = pl->m_unk32d0;
         m_unk32ec               = pl->m_unk32ec;
-        m_commandIndex        = pl->m_gameState.m_commandIndex;
-        m_isPaused           = pl->m_isPaused;
+        m_commandIndex          = pl->m_gameState.m_commandIndex;
+        m_isPaused              = pl->m_isPaused;
 
         #ifndef GEODE_IS_ANDROID
         m_gameObjectPhysics     = pl->m_gameState.m_gameObjectPhysics;
@@ -630,7 +647,7 @@ struct SupplementalPlayLayerState {
         pl->m_unk32d0               = m_unk32d0;
         pl->m_unk32ec               = m_unk32ec;
         pl->m_gameState.m_commandIndex = m_commandIndex;
-        pl->m_isPaused             = m_isPaused;
+        pl->m_isPaused              = m_isPaused;
 
         #ifndef GEODE_IS_ANDROID
         pl->m_gameState.m_gameObjectPhysics = m_gameObjectPhysics;

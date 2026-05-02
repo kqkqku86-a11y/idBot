@@ -65,7 +65,6 @@ double getActualProgress(PlayLayer* pl) {
 }
 
 #ifdef REQUIRE_MODIFIED_DELTA_PATCH
-
 // function to quickly get the bytes for the patch
 [[nodiscard]] static std::vector<uint8_t> TPStoBytes() {
     return geode::toBytes<double>(1.0 / static_cast<double>(Global::get().getTPS()));
@@ -121,6 +120,7 @@ geode::Result<> setupModifiedDeltaPatches() {
 
     return geode::Ok();
 }
+#endif
 
 void applyPatches() {
 
@@ -253,9 +253,9 @@ void applyPatches() {
         // patch toggler
         if (patch) {
             // toggle the patch if enabled
-            Global::get().onTpsEnabledChanged = [patch](bool enabled) {
+            Global::get().onTpsEnabledChanged.push_back([patch](bool enabled) {
                 (void)patch->toggle(enabled);
-            };
+            });
 
             // set the initial state of the patch
             (void)patch->toggle(Global::get().tpsEnabled);
