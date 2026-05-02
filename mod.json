@@ -165,7 +165,8 @@
 			"type": "keybind",
 			"default": "Alt+P",
 			"category": "gameplay",
-			"migrate-from": "zilko.xdbot/toggle_render"
+			"migrate-from": "zilko.xdbot/toggle_render",
+			"platforms": ["win", "mac", "android"]
 		},
 		"background_color": {
             "name": "Menu background color",

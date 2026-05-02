@@ -90,6 +90,7 @@ void handleKeybind(std::string_view id, bool down, bool repeat, double time) {
                 ShowTrajectory::trajectoryOff();
         };
 
+        #ifndef GEODE_IS_IOS
         map["toggle_render_keybind"] = []() {
             if (PlayLayer::get()) {
                 auto& g = Global::get();
@@ -102,6 +103,7 @@ void handleKeybind(std::string_view id, bool down, bool repeat, double time) {
                 }
             }
         };
+        #endif
 
         map["toggle_noclip_keybind"] = []() {
             auto& g = Global::get();
@@ -136,7 +138,9 @@ $execute {
         {"toggle_frame_stepper_keybind", false},
         {"step_frame_keybind", true},
         {"show_trajectory_keybind", false},
+        #ifndef GEODE_IS_IOS
         {"toggle_render_keybind", false},
+        #endif
         {"toggle_noclip_keybind", false},
     };
 
