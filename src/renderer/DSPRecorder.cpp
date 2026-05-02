@@ -59,38 +59,34 @@ void DSPRecorder::start() {
 
 void DSPRecorder::stop() {
     if (!m_recording) return;
-    m_masterGroup->removeDSP(m_dsp);
     m_recording = false;
-    log::info("DSPRecorder: stopped, {} samples captured", m_data.lock()->size());
-    Loader::get()->queueInMainThread([this] {
+    geode::queueInMainThread([this] {
+        m_masterGroup->removeDSP(m_dsp);
         m_masterGroup->setPaused(false);
+        log::info("DSPRecorder: stopped, {} samples captured", m_data.lock()->size());
     });
 }
 
 std::vector<float> DSPRecorder::getData() {
     auto guard = m_data.lock();
-    auto data = std::move(*guard);  // move out, leaving m_data empty
-    return data;
+    return std::move(*guard);
 }
 
 void DSPRecorder::tryUnpause(float time) const {
+    if (!m_recording) return;
     if (!m_masterGroup) return;
     auto* system = FMODAudioEngine::sharedEngine()->m_system;
     int sampleRate = 0, channels = 0;
     system->getSoftwareFormat(&sampleRate, nullptr, &channels);
     if (sampleRate <= 0 || channels <= 0) return;
 
-    for (int i = 0; i < 200; i++) {
-        float songTime;
-        {
-            auto guard = m_data.lock();
-            songTime = static_cast<float>(guard->size()) /
-                       (static_cast<float>(sampleRate) * static_cast<float>(channels));
-        }
-        if (songTime >= time) break;
-        m_masterGroup->setPaused(false);
-        asp::sleep(asp::Duration::fromMicros(100));
+    float songTime;
+    {
+        auto guard = m_data.lock();
+        songTime = static_cast<float>(guard->size()) /
+                   (static_cast<float>(sampleRate) * static_cast<float>(channels));
     }
+    if (time >= songTime) m_masterGroup->setPaused(false);
 }
 
 #endif

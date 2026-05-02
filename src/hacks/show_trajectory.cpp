@@ -7,6 +7,7 @@
 #include <Geode/modify/GameObject.hpp>
 #include <Geode/modify/EffectGameObject.hpp>
 #include <Geode/modify/HardStreak.hpp>
+#include <Geode/modify/CCKeyboardDispatcher.hpp>
 
 ShowTrajectory& t = ShowTrajectory::get();
 
@@ -96,7 +97,7 @@ void ShowTrajectory::createTrajectory(PlayLayer* pl, PlayerObject* fakePlayer, P
 
         if (i == 0) {
             hold ? fakePlayer->pushButton(static_cast<PlayerButton>(1)) : fakePlayer->releaseButton(static_cast<PlayerButton>(1));
-            if (pl->m_isPlatformer)
+            if (pl->m_levelSettings->m_platformerMode)
                 (inverted ? !realPlayer->m_isGoingLeft : realPlayer->m_isGoingLeft) ? fakePlayer->pushButton(static_cast<PlayerButton>(2)) : fakePlayer->pushButton(static_cast<PlayerButton>(3));
         }
 

@@ -3,33 +3,36 @@
 #include "DSPRecorder.hpp"
 
 #include <Geode/modify/CCCircleWave.hpp>
-#include <Geode/modify/CCParticleSystemQuad.hpp>
+#include <Geode/modify/CCParticleSystem.hpp>
 #include <Geode/modify/CCScheduler.hpp>
 #include <Geode/modify/EndLevelLayer.hpp>
 #include <Geode/modify/FMODAudioEngine.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/ShaderLayer.hpp>
 
 #ifdef GEODE_IS_WINDOWS
 #include "../utils/subprocess.hpp"
 #endif
 
-#include <filesystem>
-#include <thread>
-
 #ifndef GEODE_IS_IOS
 
-static bool writePCMWav(const std::filesystem::path& outPath,
-                        std::span<const float> pcm, FMOD::System* system);
+static bool writePCMWav(const std::filesystem::path& outPath, std::span<const float> pcm, FMOD::System* system);
+bool m_cbsWasEnabled;
 
-class $modify(CCParticleSystemQuad) {
-    static CCParticleSystemQuad* create(const char* v1, bool v2) {
-        CCParticleSystemQuad* ret = CCParticleSystemQuad::create(v1, v2);
-        if (!Global::get().renderer.recording) return ret;
-        if (std::string_view(v1) == "levelComplete01.plist" &&
-            Mod::get()->getSavedValue<bool>("render_hide_levelcomplete"))
-            ret->setVisible(false);
-        return ret;
+class $modify(CCParticleSystem) {
+    void initParticle(sCCParticle* p0) {
+        CCParticleSystem::initParticle(p0);
+        
+        if (!Mod::get()->getSavedValue<bool>("render_hide_levelcomplete")) return;
+        
+        if (auto particle = typeinfo_cast<CCParticleSystemQuad*>(this)) {
+            PlayLayer* pl = PlayLayer::get();
+            if (!pl) return;
+            if (this->getParent() != pl) return;
+            
+            particle->setVisible(false);
+        }
     }
 };
 
@@ -44,17 +47,20 @@ class $modify(CCCircleWave) {
     }
 };
 
-class $modify(RenderPlayLayerHook, PlayLayer) {
+class $modify(PlayLayer) {
     void showCompleteText() {
         PlayLayer::showCompleteText();
+        
         if (!Global::get().renderer.recording) return;
-        if (m_levelEndAnimationStarted &&
-            Mod::get()->getSavedValue<bool>("render_hide_levelcomplete")) {
-            for (CCNode* node : CCArrayExt<CCNode*>(getChildren())) {
-                CCSprite* spr = typeinfo_cast<CCSprite*>(node);
-                if (!spr) continue;
-                if (!isSpriteFrameName(spr, "GJ_levelComplete_001.png")) continue;
-                spr->setVisible(false);
+        
+        if (m_levelEndAnimationStarted && Mod::get()->getSavedValue<bool>("render_hide_levelcomplete")) {
+                const char* spriteName = m_isPracticeMode ? 
+                    "GJ_practiceComplete_001.png" : 
+                    "GJ_levelComplete_001.png";
+                
+            if (auto* node = getChildBySpriteFrameName(this, spriteName)) {
+                node->stopAllActions();
+                node->setVisible(false);
             }
         }
     }
@@ -79,40 +85,96 @@ class $modify(FMODAudioEngine) {
     }
 };
 
-class $modify(GJBaseGameLayer) {
-    void update(float dt) {
-        GJBaseGameLayer::update(dt);
-        auto& g = Global::get();
-        PlayLayer* pl = PlayLayer::get();
-        if (!g.renderer.recording || !pl) return;
-        int frame  = Global::getCurrentFrame();
-        int tpsInt = static_cast<int>(Global::getTPS());
-        int fpsInt = static_cast<int>(g.renderer.fps);
-        if (tpsInt <= 0 || fpsInt <= 0) return;
-        if (frame % (tpsInt / fpsInt) == 0)
-            g.renderer.handleRecording(pl, frame);
-    }
-};
-
-static float schedulerLeftOver = 0.f;
+// class $modify(InternalRecorderSLHook, ShaderLayer) {
+//     void visit() {
+//         if (Global::get().renderer.recording) {
+//             setScaleY(-1);
+//             ShaderLayer::visit();
+//             return setScaleY(1);
+//         }
+//         ShaderLayer::visit();
+//     }
+// };
 
 class $modify(CCScheduler) {
     void update(float dt) {
         Renderer& r = Global::get().renderer;
         if (!r.recording) return CCScheduler::update(dt);
-        r.changeRes(false);
-        float newDt     = 1.f / Global::getTPS();
-        auto  startTime = asp::time::Instant::now();
-        int   mult      = static_cast<int>((dt + schedulerLeftOver) / newDt);
-        for (int i = 0; i < mult; ++i) {
-            CCScheduler::update(newDt);
-            if (startTime.elapsed() > asp::time::Duration::fromMillis(33)) {
-                mult = i + 1;
-                break;
+
+        r.applyWinSize();
+
+        float fps = static_cast<float>(r.fps);
+        if (fps < 1) fps = 1;
+
+        float newDt = (1.f / fps) * (fps / static_cast<float>(Global::getTPS()));
+
+        CCScheduler::update(newDt);
+
+        r.restoreWinSize();
+    }
+};
+
+class $modify(GJBaseGameLayer) {
+    void update(float dt) {
+        Renderer& r = Global::get().renderer;
+
+        if (!r.recording || m_gameState.m_currentProgress <= 0)
+            return GJBaseGameLayer::update(dt);
+
+        float endscreen = Mod::get()->getSavedValue<float>("render_seconds_after");
+
+        if (r.levelFinished) {
+            r.timeAfter += dt;
+            if (r.timeAfter >= r.stopAfter) {
+                r.stop();
+                return GJBaseGameLayer::update(dt);
             }
         }
-        schedulerLeftOver += (dt - newDt * mult);
-        r.changeRes(true);
+
+        if (!r.recording)
+            return GJBaseGameLayer::update(dt);
+
+        float fps      = static_cast<float>(r.fps);
+        float timewarp = m_gameState.m_timeWarp;
+
+        r.totalTime += dt;
+
+        float frameDt = (1.f / fps) * timewarp;
+        float time    = r.totalTime + r.extra_t - r.lastFrame_t;
+
+        DSPRecorder::get()->tryUnpause(r.totalTime);
+
+        if (time >= frameDt) {
+            r.extra_t     = time - frameDt;
+            r.lastFrame_t = r.totalTime;
+
+            r.capturing = true;
+            r.captureFrame();
+            r.capturing = false;
+        }
+
+        GJBaseGameLayer::update(dt);
+    }
+};
+
+class $modify(RendererPlayLayerHook, PlayLayer) {
+    void onQuit() {
+        if (Global::get().renderer.recording) Global::get().renderer.stop();
+        PlayLayer::onQuit();
+    }
+
+    void levelComplete() {
+        PlayLayer::levelComplete();
+        Global::get().renderer.levelFinished = true;
+    }
+
+    void resetLevel() {
+        auto& r = Global::get().renderer;
+        if (r.recording) {
+            r.levelFinished = false;
+            r.timeAfter     = 0.f;
+        }
+        PlayLayer::resetLevel();
     }
 };
 
@@ -122,21 +184,16 @@ bool Renderer::shouldUseAPI() {
 
 bool Renderer::toggle() {
     auto& g = Global::get();
-
-    if (Loader::get()->isModLoaded("syzzi.click_between_frames")) {
+    auto gm = GameManager::sharedState();
+    auto cbf = Loader::get()->getLoadedMod("syzzi.click_between_frames");
+    if (cbf && !cbf->getSettingValue<bool>("soft-toggle")) {
         FLAlertLayer::create("Render", "Disable CBF in Geode to render a level.", "OK")->show();
         return false;
     }
 
-    if (GameManager::sharedState()->getGameVariable(GameVar::ClickBetweenSteps)) {
-        auto scene = CCScene::get();
-        if (scene && !scene->getChildByID("render-alert"_spr)) {
-            auto alert = FLAlertLayer::create(
-                "Render", "Disable <cr>Click Between Steps</c> to render a level.", "OK");
-            alert->setID("render-alert"_spr);
-            alert->show();
-        }
-        return false;
+    m_cbsWasEnabled = gm->getGameVariable(GameVar::ClickBetweenSteps);
+    if (m_cbsWasEnabled) {
+        gm->setGameVariable(GameVar::ClickBetweenSteps, false);
     }
 
     bool foundApi = shouldUseAPI();
@@ -149,12 +206,12 @@ bool Renderer::toggle() {
 #endif
 
     if (g.renderer.recording) {
-        g.renderer.stop(Global::getCurrentFrame());
+        g.renderer.stop();
     } else {
 #ifdef GEODE_IS_WINDOWS
         if (!foundApi && !foundExe) {
             geode::createQuickPopup("Error",
-                "<cl>FFmpeg</c> not found. Install eclipse.ffmpeg-api, or set the path "
+                "<cl>FFmpeg</c> not found. Either install FFmpeg API, or set the path "
                 "to ffmpeg.exe in mod settings.\nOpen download link?",
                 "Cancel", "Yes", [](auto, bool btn2) {
                     if (btn2) {
@@ -206,23 +263,60 @@ bool Renderer::toggle() {
     return true;
 }
 
+void Renderer::applyWinSize() {
+    if (newDesignResolution.width == 0 || newDesignResolution.height == 0) return;
+
+    auto view = cocos2d::CCEGLView::get();
+    CCDirector::sharedDirector()->m_obWinSizeInPoints = newDesignResolution;
+    view->setDesignResolutionSize(
+        newDesignResolution.width, newDesignResolution.height,
+        ResolutionPolicy::kResolutionExactFit);
+    view->m_fScaleX = newScreenScale.width;
+    view->m_fScaleY = newScreenScale.height;
+}
+
+void Renderer::restoreWinSize() {
+    if (oldDesignResolution.width == 0 || oldDesignResolution.height == 0) return;
+
+    auto view = cocos2d::CCEGLView::get();
+    CCDirector::sharedDirector()->m_obWinSizeInPoints = oldDesignResolution;
+    view->setDesignResolutionSize(
+        oldDesignResolution.width, oldDesignResolution.height,
+        ResolutionPolicy::kResolutionExactFit);
+    view->m_fScaleX = originalScreenScale.width;
+    view->m_fScaleY = originalScreenScale.height;
+}
+
+void Renderer::fixUIObjects() {
+    auto pl = PlayLayer::get();
+    if (!pl) return;
+
+    for (auto obj : CCArrayExt<GameObject*>(pl->m_objects)) {
+        auto it = pl->m_uiObjectPositions.find(obj->m_uniqueID);
+        if (it == pl->m_uiObjectPositions.end()) continue;
+        obj->setStartPos(it->second);
+    }
+
+    pl->positionUIObjects();
+}
+
 void Renderer::start() {
     PlayLayer* pl  = PlayLayer::get();
     Mod*       mod = Mod::get();
     fmod = FMODAudioEngine::sharedEngine();
 
-    fps          = geode::utils::numFromString<int>(
-                       mod->getSavedValue<std::string>("render_fps")).unwrapOr(60);
-    codec        = mod->getSavedValue<std::string>("render_codec");
-    bitrate      = mod->getSavedValue<std::string>("render_bitrate") + "M";
-    extraArgs    = mod->getSavedValue<std::string>("render_args");
-    videoArgs    = mod->getSavedValue<std::string>("render_video_args");
+    fps            = geode::utils::numFromString<int>(
+                         mod->getSavedValue<std::string>("render_fps")).unwrapOr(60);
+    codec          = mod->getSavedValue<std::string>("render_codec");
+    bitrate        = mod->getSavedValue<std::string>("render_bitrate") + "M";
+    extraArgs      = mod->getSavedValue<std::string>("render_args");
+    videoArgs      = mod->getSavedValue<std::string>("render_video_args");
     extraAudioArgs = mod->getSavedValue<std::string>("render_audio_args");
-    SFXVolume    = mod->getSavedValue<double>("render_sfx_volume");
-    musicVolume  = mod->getSavedValue<double>("render_music_volume");
-    stopAfter    = geode::utils::numFromString<float>(
-                       mod->getSavedValue<std::string>("render_seconds_after")).unwrapOr(0.f);
-    audioMode    = AudioMode::Record;
+    SFXVolume      = mod->getSavedValue<double>("render_sfx_volume");
+    musicVolume    = mod->getSavedValue<double>("render_music_volume");
+    stopAfter      = geode::utils::numFromString<float>(
+                         mod->getSavedValue<std::string>("render_seconds_after")).unwrapOr(0.f);
+    audioMode      = AudioMode::Record;
 
     std::string extension = mod->getSavedValue<std::string>("render_file_extension");
     auto timestamp = asp::time::SystemTime::now().timeSinceEpoch().millis();
@@ -244,24 +338,37 @@ void Renderer::start() {
     if (width  % 2 != 0) width++;
     if (height % 2 != 0) height++;
 
-    m_renderTexture = MyRenderTexture();
-    m_renderTexture.width  = width;
-    m_renderTexture.height = height;
-    ogRes    = cocos2d::CCEGLView::get()->getDesignResolutionSize();
-    ogScaleX = cocos2d::CCEGLView::get()->m_fScaleX;
-    ogScaleY = cocos2d::CCEGLView::get()->m_fScaleY;
+    auto view = cocos2d::CCEGLView::get();
+    oldDesignResolution = view->getDesignResolutionSize();
+    originalScreenScale = cocos2d::CCSize(view->m_fScaleX, view->m_fScaleY);
+
+    float aspectRatio   = static_cast<float>(width) / static_cast<float>(height);
+    newDesignResolution = cocos2d::CCSize(roundf(320.f * aspectRatio), 320.f);
+
+    float retinaRatio = geode::utils::getDisplayFactor();
+    newScreenScale = cocos2d::CCSize(
+        static_cast<float>(width)  / newDesignResolution.width  / retinaRatio,
+        static_cast<float>(height) / newDesignResolution.height / retinaRatio);
 
     recording     = true;
     levelFinished = false;
+    capturing     = false;
     timeAfter     = 0.f;
-    lastFrame_t   = extra_t = 0.0;
-    dontRender    = true;
+    totalTime     = 0.f;
+    extra_t       = 0.f;
+    lastFrame_t   = 0.f;
 
-    renderedFrames.clear();
+    m_renderTexture        = xdBotRenderTexture();
+    m_renderTexture.width  = width;
+    m_renderTexture.height = height;
     m_currentFrame.resize(width * height * 4, 0);
 
     m_renderTexture.begin();
-    changeRes(false);
+
+    if (oldDesignResolution != newDesignResolution) {
+        applyWinSize();
+        fixUIObjects();
+    }
 
     DSPRecorder::get()->start();
 
@@ -280,23 +387,99 @@ void Renderer::start() {
     async::runtime().spawnBlocking<void>([this]() { recordThread(); });
 }
 
+void Renderer::stop() {
+    if (!recording) return;
+    recording = false;
+
+    m_frameReady.set(true);
+
+     if (m_cbsWasEnabled) {
+        GameManager::sharedState()->setGameVariable(GameVar::ClickBetweenSteps, true);
+    }
+
+    m_renderTexture.end();
+    restoreWinSize();
+    DSPRecorder::get()->stop();
+}
+
+void Renderer::captureFrame() {
+    m_frameReady.wait_for(false);
+
+    if (!recording) return;
+
+    m_renderTexture.capture(PlayLayer::get(), m_currentFrame, m_frameReady);
+}
+
+void xdBotRenderTexture::begin() {
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
+
+    auto bytesPerRow = width * 4;
+    if      (bytesPerRow % 8 == 0) glPixelStorei(GL_UNPACK_ALIGNMENT, 8);
+    else if (bytesPerRow % 4 == 0) glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    else if (bytesPerRow % 2 == 0) glPixelStorei(GL_UNPACK_ALIGNMENT, 2);
+    else                           glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    glGenTextures(1, &texture);
+    glBindTexture(GL_TEXTURE_2D, texture);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                           GL_TEXTURE_2D, texture, 0);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, old_fbo);
+}
+
+void xdBotRenderTexture::end() {
+    if (texture) { glDeleteTextures(1,    &texture); texture = 0; }
+    if (fbo)     { glDeleteFramebuffers(1, &fbo);    fbo     = 0; }
+}
+
+void xdBotRenderTexture::capture(cocos2d::CCNode* node, std::vector<uint8_t>& buffer,
+                                  Spinlock& frameReady) {
+    glViewport(0, 0, width, height);
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    node->visit();
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+
+    frameReady.set(true);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, old_fbo);
+    CCDirector::sharedDirector()->setViewport();
+}
+
 void Renderer::recordThread() {
     geode::utils::thread::setName("xdBot Recorder Thread");
 
     Mod* mod = Mod::get();
 
-    int bitrateApi = geode::utils::numFromString<int>(
+    int bitrateVal = geode::utils::numFromString<int>(
         mod->getSavedValue<std::string>("render_bitrate")).unwrapOr(12) * 1000000;
+
+    log::info("Renderer: usingApi={}, videoArgs='{}'", usingApi, videoArgs);
 
     ffmpeg::RenderSettings settings;
     settings.m_pixelFormat       = ffmpeg::PixelFormat::RGBA;
     settings.m_codec             = codec;
-    settings.m_bitrate           = bitrateApi;
+    settings.m_bitrate           = bitrateVal;
     settings.m_width             = width;
     settings.m_height            = height;
     settings.m_fps               = static_cast<uint16_t>(fps);
     settings.m_outputFile        = path;
-    settings.m_colorspaceFilters = videoArgs;
+    settings.m_colorspaceFilters = usingApi ? "" : videoArgs;
     settings.m_doVerticalFlip    = true;
 
 #ifdef GEODE_IS_WINDOWS
@@ -308,6 +491,7 @@ void Renderer::recordThread() {
         if (res.isErr()) {
             recording = false;
             m_frameReady.set(true);
+            DSPRecorder::get()->stop();
             Loader::get()->queueInMainThread([] {
                 FLAlertLayer::create("Error", "FFmpeg API failed to initialize.", "OK")->show();
             });
@@ -330,8 +514,8 @@ void Renderer::recordThread() {
             fadeArgs = fmt::format(",fade=t=in:st=0:d={}", fadeInTime);
 
         std::string command = fmt::format(
-        "\"{}\" -y -f rawvideo -pix_fmt rgba -s {}x{} -r {} -i - {}{}{} "
-        "-vf \"vflip,{}{}\" -an \"{}\" ",
+            "\"{}\" -y -f rawvideo -pix_fmt rgba -s {}x{} -r {} -i - {}{}{} "
+            "-vf \"vflip,{}{}\" -an \"{}\" ",
             ffmpegPath,
             geode::utils::numToString(width), geode::utils::numToString(height),
             geode::utils::numToString(fps),
@@ -376,6 +560,7 @@ void Renderer::recordThread() {
 #ifdef GEODE_IS_WINDOWS
     else {
         if (process.close()) {
+            DSPRecorder::get()->stop();
             Loader::get()->queueInMainThread([] {
                 FLAlertLayer::create("Error",
                     "There was an error saving the render. Wrong render Args.", "OK")->show();
@@ -385,7 +570,8 @@ void Renderer::recordThread() {
     }
 #endif
 
-   auto pcm = DSPRecorder::get()->getData();
+    DSPRecorder::get()->stop();
+    auto pcm = DSPRecorder::get()->getData();
 
     Loader::get()->queueInMainThread([] {
         Notification::create("Saving Render...", NotificationIcon::Loading)->show();
@@ -408,13 +594,15 @@ void Renderer::recordThread() {
     int sampleRate = 48000, audioChannels = 2;
     if (fmod && fmod->m_system)
         fmod->m_system->getSoftwareFormat(&sampleRate, nullptr, &audioChannels);
+
     double capturedLastFrame = lastFrame_t;
-    size_t expectedSamples = static_cast<size_t>(capturedLastFrame * sampleRate * audioChannels);
+    size_t expectedSamples   = static_cast<size_t>(
+        capturedLastFrame * sampleRate * audioChannels);
 
     log::info("Renderer: pcm={} expected={} lastFrame_t={:.3f}s",
         pcm.size(), expectedSamples, capturedLastFrame);
 
-    std::span<float> pcmSpan = std::span<float>(pcm);
+    std::span<float> pcmSpan(pcm);
     if (pcmSpan.size() > expectedSamples)
         pcmSpan = pcmSpan.subspan(0, expectedSamples);
 
@@ -431,12 +619,12 @@ void Renderer::recordThread() {
         std::filesystem::path tempWav = Mod::get()->getSaveDir() / "temp_audio_file.wav";
         if (!writePCMWav(tempWav, pcmSpan, fmod ? fmod->m_system : nullptr)) {
             Loader::get()->queueInMainThread([] {
-                FLAlertLayer::create("Error", "Failed to write captured audio to WAV.", "OK")->show();
+                FLAlertLayer::create("Error",
+                    "Failed to write captured audio to WAV.", "OK")->show();
             });
             return;
         }
 
-        double totalTime = capturedLastFrame;
         if (!extraAudioArgs.empty()) extraAudioArgs += " ";
 
         std::string cmd = fmt::format(
@@ -444,12 +632,12 @@ void Renderer::recordThread() {
             "-filter:a \"[1:a]adelay=0|0\" \"{}\"",
             ffmpegPath,
             geode::utils::string::pathToString(tempWav),
-            path, totalTime, extraAudioArgs,
+            path, capturedLastFrame, extraAudioArgs,
             geode::utils::string::pathToString(tempPath));
 
         log::info("Renderer (recorded audio): {}", cmd);
         auto proc = subprocess::Popen(cmd);
-        if (proc.close()) mixRes = geode::Err(std::string("Wrong Audio Args"));
+        if (proc.close()) mixRes = geode::Err("Wrong Audio Args");
         else              mixRes = geode::Ok();
 
         std::error_code ec;
@@ -481,129 +669,6 @@ void Renderer::recordThread() {
         Notification::create("Render Saved With Audio", NotificationIcon::Success)->show();
         showEndScreenIfNeeded();
     });
-}
-
-void Renderer::stop(int /*frame*/) {
-    if (!recording) return;
-    recording = false;
-
-    m_frameReady.set(true);
-
-    m_renderTexture.end();
-    changeRes(true);
-    DSPRecorder::get()->stop();
-}
-
-void Renderer::changeRes(bool og) {
-    cocos2d::CCEGLView* view = cocos2d::CCEGLView::get();
-    cocos2d::CCSize res;
-    float scaleX, scaleY;
-
-    if (og) {
-        res    = ogRes;
-        scaleX = ogScaleX;
-        scaleY = ogScaleY;
-    } else {
-        res    = CCSize(320.f * (width / static_cast<float>(height)), 320.f);
-        scaleX = width  / res.width;
-        scaleY = height / res.height;
-    }
-
-    if (res == CCSize(0, 0) && !og) return changeRes(true);
-
-    CCDirector::sharedDirector()->m_obWinSizeInPoints = res;
-    view->setDesignResolutionSize(res.width, res.height, ResolutionPolicy::kResolutionExactFit);
-    view->m_fScaleX = scaleX;
-    view->m_fScaleY = scaleY;
-}
-
-void MyRenderTexture::begin() {
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
-
-    auto* tex = new cocos2d::CCTexture2D();
-    {
-        std::unique_ptr<char, void(*)(void*)> data(
-            static_cast<char*>(malloc(width * height * 4)), free);
-        memset(data.get(), 0, width * height * 4);
-        tex->initWithData(data.get(), cocos2d::kCCTexture2DPixelFormat_RGBA8888,
-            width, height,
-            cocos2d::CCSize(static_cast<float>(width), static_cast<float>(height)));
-    }
-    texture = tex;
-
-    glGetIntegerv(GL_RENDERBUFFER_BINDING, &old_rbo);
-    glGenFramebuffers(1, &fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-        GL_TEXTURE_2D, texture->getName(), 0);
-    texture->setAliasTexParameters();
-    texture->autorelease();
-    glBindRenderbuffer(GL_RENDERBUFFER, old_rbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, old_fbo);
-}
-
-void MyRenderTexture::end() {
-    if (texture) { /* autorelease handles cleanup */ texture = nullptr; }
-    if (fbo) { glDeleteFramebuffers(1, &fbo); fbo = 0; }
-}
-
-void MyRenderTexture::capture(cocos2d::CCNode* node, std::vector<uint8_t>& buffer,
-                               RendererSpinlock& frameReady) {
-    auto* director = cocos2d::CCDirector::sharedDirector();
-
-    glViewport(0, 0, width, height);
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &old_fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-    node->visit();
-
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
-
-    frameReady.set(true);
-
-    glBindFramebuffer(GL_FRAMEBUFFER, old_fbo);
-    director->setViewport();
-}
-
-void Renderer::captureFrame() {
-    m_frameReady.wait_for(false);
-
-    if (!recording) return;
-
-    m_renderTexture.capture(PlayLayer::get(), m_currentFrame, m_frameReady);
-}
-
-void Renderer::handleRecording(PlayLayer* pl, int frame) {
-    if (!pl) { stop(frame); return; }
-    isPlatformer = pl->m_isPlatformer;
-    if (dontRender || pl->m_player1->m_isDead) return;
-
-    if (renderedFrames.contains(frame) && frame > 10) return;
-    renderedFrames.insert(frame);
-
-    if (!pl->m_hasCompletedLevel || timeAfter < stopAfter) {
-        float dt = 1.f / static_cast<double>(fps);
-        if (pl->m_hasCompletedLevel) {
-            timeAfter    += dt;
-            levelFinished = true;
-        }
-
-        float time = pl->m_gameState.m_levelTime + extra_t - lastFrame_t;
-        if (time >= dt) {
-            extra_t     = time - dt;
-            lastFrame_t = pl->m_gameState.m_levelTime;
-
-            captureFrame();
-
-            DSPRecorder::get()->tryUnpause(static_cast<float>(lastFrame_t));
-
-            fmod->m_globalChannel->setVolume(SFXVolume);
-            fmod->m_backgroundMusicChannel->setVolume(musicVolume);
-        }
-    } else {
-        stop(frame);
-    }
 }
 
 static bool writePCMWav(const std::filesystem::path& outPath,
@@ -641,7 +706,7 @@ static bool writePCMWav(const std::filesystem::path& outPath,
     data.append(reinterpret_cast<const char*>(&bitsPerSample), 2);
     data.append("data", 4);
     data.append(reinterpret_cast<const char*>(&dataSize),      4);
-    data.append(reinterpret_cast<const char*>(pcm16.data()), dataSize);
+    data.append(reinterpret_cast<const char*>(pcm16.data()),   dataSize);
 
     auto span = std::span(reinterpret_cast<const unsigned char*>(data.data()), data.size());
     return geode::utils::file::writeBinary(outPath, span).isOk();

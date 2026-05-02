@@ -3,6 +3,7 @@
 #include <vector>
 #include <asp/sync/Mutex.hpp>
 #include <Geode/fmod/fmod.hpp>
+#include "spinlock.hpp"
 
 #ifndef GEODE_IS_IOS
 

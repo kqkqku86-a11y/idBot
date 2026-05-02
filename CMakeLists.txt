@@ -23,7 +23,6 @@ add_subdirectory($ENV{GEODE_SDK} ${CMAKE_CURRENT_BINARY_DIR}/geode)
 
 CPMAddPackage("gh:prevter/msgpack-for-matjson#12edd5a")
 CPMAddPackage("gh:prevter/sinaps#b9c3434")
-CPMAddPackage("gh:maxnut/GDReplayFormat#72078e5")
 CPMAddPackage("gh:maxnut/GDR-converter#71104a9")
 target_link_libraries(${PROJECT_NAME} sinaps libGDR GDRconverter)
 
