@@ -11,7 +11,7 @@ $execute {
     geode::listenForSettingChanges<std::string>(
         "macro_accuracy",
         +[](std::string value) {
-            auto &g = Global::get();
+            auto& g = Global::get();
             g.frameFixes = false;
             g.inputFixes = false;
             if (value == "Frame Fixes")
@@ -23,43 +23,47 @@ $execute {
 
     geode::listenForSettingChanges<int64_t>(
         "frame_fixes_limit",
-        +[](int64_t value) { Global::get().frameFixesLimit = value; },
+        +[](int64_t value) {
+            Global::get().frameFixesLimit = value;
+        },
         Mod::get());
 
     geode::listenForSettingChanges<bool>(
-        "lock_delta", +[](bool value) { Global::get().lockDelta = value; },
+        "lock_delta",
+        +[](bool value) {
+            Global::get().lockDelta = value;
+        },
         Mod::get());
 
     geode::listenForSettingChanges<bool>(
         "auto_stop_playing",
-        +[](bool value) { Global::get().stopPlaying = value; }, Mod::get());
+        +[](bool value) {
+            Global::get().stopPlaying = value;
+        },
+        Mod::get());
 };
 
 class $modify(EclipseSyncGJBGLHook, GJBaseGameLayer) {
     void update(float dt) {
         GJBaseGameLayer::update(dt);
 
-        static bool hasEclipse =
-            Loader::get()->getLoadedMod("eclipse.eclipse-menu") != nullptr;
+        static bool hasEclipse = Loader::get()->getLoadedMod("eclipse.eclipse-menu") != nullptr;
         if (!hasEclipse)
             return;
 
-        auto &g = Global::get();
+        auto& g = Global::get();
         if (!g.tpsEnabled)
             return;
 
-        bool eclipseEnabled =
-            eclipse::config::getInternal("global.tpsbypass.toggle", false);
-        double eclipseTps =
-            eclipse::config::getInternal("global.tpsbypass", 240.0);
+        bool eclipseEnabled = eclipse::config::getInternal("global.tpsbypass.toggle", false);
+        double eclipseTps = eclipse::config::getInternal("global.tpsbypass", 240.0);
 
         if (!eclipseEnabled) {
             eclipse::config::setInternal("global.tpsbypass.toggle", true);
         }
 
         if (eclipseTps != static_cast<double>(g.tps)) {
-            eclipse::config::setInternal("global.tpsbypass",
-                                         static_cast<double>(g.tps));
+            eclipse::config::setInternal("global.tpsbypass", static_cast<double>(g.tps));
         }
     }
 };
@@ -72,7 +76,7 @@ class $modify(PlayLayer) {
 
     void postUpdate(float dt) {
         PlayLayer::postUpdate(dt);
-        auto &g = Global::get();
+        auto& g = Global::get();
         if (m_fields->delayedLevelRestart != -1 &&
             m_fields->delayedLevelRestart >= Global::getCurrentFrame()) {
             m_fields->delayedLevelRestart = -1;
@@ -89,7 +93,7 @@ class $modify(PlayLayer) {
     }
 
     void pauseGame(bool b1) {
-        auto &g = Global::get();
+        auto& g = Global::get();
 
         if (!m_player1 || !m_player2)
             return PlayLayer::pauseGame(b1);
@@ -101,13 +105,12 @@ class $modify(PlayLayer) {
         g.ignoreRecordAction = false;
     }
 
-    bool init(GJGameLevel *level, bool b1, bool b2) {
-        auto &g = Global::get();
+    bool init(GJGameLevel* level, bool b1, bool b2) {
+        auto& g = Global::get();
         g.firstAttempt = true;
         if (!PlayLayer::init(level, b1, b2))
             return false;
-        g.currentSession =
-            asp::time::SystemTime::now().timeSinceEpoch().millis();
+        g.currentSession = asp::time::SystemTime::now().timeSinceEpoch().millis();
         g.lastAutoSaveFrame = 0;
         return true;
     }
@@ -115,7 +118,7 @@ class $modify(PlayLayer) {
     void resetLevel() {
         bool hadCheckpoints = m_checkpointArray->count() > 0;
 
-        auto &g = Global::get();
+        auto& g = Global::get();
         bool previousIgnore = g.ignoreRecordAction;
         g.ignoreRecordAction = true;
 
@@ -153,7 +156,7 @@ class $modify(PlayLayer) {
 
             g.macro.framerate = 240.f;
             if (g.layer)
-                static_cast<RecordLayer *>(g.layer)->updateTPS();
+                static_cast<RecordLayer*>(g.layer)->updateTPS();
         }
     }
 };
@@ -166,8 +169,8 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
 #ifndef GEODE_IS_MACOS
     void processCommands(float dt, bool isHalfTick, bool isLastTick) {
-        auto &g = Global::get();
-        PlayLayer *pl = PlayLayer::get();
+        auto& g = Global::get();
+        PlayLayer* pl = PlayLayer::get();
 
         if (!pl)
             return GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
@@ -183,16 +186,14 @@ class $modify(BGLHook, GJBaseGameLayer) {
             int frame = Global::getCurrentFrame();
             if (frame > 2 && g.firstAttempt && g.macro.xdBotMacro) {
                 g.firstAttempt = false;
-                if ((m_isPlatformer || rendering) &&
-                    !m_levelEndAnimationStarted)
+                if ((m_isPlatformer || rendering) && !m_levelEndAnimationStarted)
                     return pl->resetLevelFromStart();
                 else if (!m_levelEndAnimationStarted)
                     return pl->resetLevel();
             }
 
             if (g.previousFrame == frame && frame != 0 && g.macro.xdBotMacro)
-                return GJBaseGameLayer::processCommands(dt, isHalfTick,
-                                                        isLastTick);
+                return GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
         }
 
         GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
@@ -224,8 +225,8 @@ class $modify(BGLHook, GJBaseGameLayer) {
     }
 #else
     void processQueuedButtons(float dt, bool clearInputQueue) {
-        auto &g = Global::get();
-        PlayLayer *pl = PlayLayer::get();
+        auto& g = Global::get();
+        PlayLayer* pl = PlayLayer::get();
 
         if (!pl)
             return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
@@ -238,16 +239,14 @@ class $modify(BGLHook, GJBaseGameLayer) {
             int frame = Global::getCurrentFrame();
             if (frame > 2 && g.firstAttempt && g.macro.xdBotMacro) {
                 g.firstAttempt = false;
-                if ((m_isPlatformer || rendering) &&
-                    !m_levelEndAnimationStarted)
+                if ((m_isPlatformer || rendering) && !m_levelEndAnimationStarted)
                     return pl->resetLevelFromStart();
                 else if (!m_levelEndAnimationStarted)
                     return pl->resetLevel();
             }
 
             if (g.previousFrame == frame && frame != 0 && g.macro.xdBotMacro)
-                return GJBaseGameLayer::processQueuedButtons(dt,
-                                                             clearInputQueue);
+                return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
         }
 
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
@@ -273,29 +272,27 @@ class $modify(BGLHook, GJBaseGameLayer) {
 #endif
 
     void handleRecording(int frame) {
-        auto &g = Global::get();
+        auto& g = Global::get();
 
         if (!g.frameFixes || g.macro.inputs.empty())
             return;
 
         if (!g.macro.frameFixes.empty())
-            if (1.f / Global::getTPS() *
-                    (frame - g.macro.frameFixes.back().frame) <
+            if (1.f / Global::getTPS() * (frame - g.macro.frameFixes.back().frame) <
                 1.f / g.frameFixesLimit)
                 return;
 
         g.macro.recordFrameFix(frame, m_player1, m_player2);
     }
 
-    bool isHoldActivatedRingMode(PlayerObject *player) {
+    bool isHoldActivatedRingMode(PlayerObject* player) {
         if (!player)
             return false;
-        return player->m_isShip || player->m_isBird || player->m_isDart ||
-               player->m_isSwing;
+        return player->m_isShip || player->m_isBird || player->m_isDart || player->m_isSwing;
     }
 
     void handlePlaying(int frame) {
-        auto &g = Global::get();
+        auto& g = Global::get();
         if (m_levelEndAnimationStarted)
             return;
 
@@ -313,8 +310,7 @@ class $modify(BGLHook, GJBaseGameLayer) {
             if (frame != g.respawnFrame) {
                 if (Macro::flipControls())
                     input.player2 = !input.player2;
-                GJBaseGameLayer::handleButton(input.down, input.button,
-                                              input.player2);
+                GJBaseGameLayer::handleButton(input.down, input.button, input.player2);
             }
             g.currentAction++;
             g.safeMode = true;
@@ -336,10 +332,10 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
         while (g.currentFrameFix < g.macro.frameFixes.size() &&
                frame >= g.macro.frameFixes[g.currentFrameFix].frame) {
-            auto &fix = g.macro.frameFixes[g.currentFrameFix];
+            auto& fix = g.macro.frameFixes[g.currentFrameFix];
 
-            PlayerObject *p1 = m_player1;
-            PlayerObject *p2 = m_player2;
+            PlayerObject* p1 = m_player1;
+            PlayerObject* p2 = m_player2;
 
             p1->setPosition(fix.p1.pos);
             if (fix.p1.rotate && fix.p1.rotation != 0.f)
@@ -364,21 +360,20 @@ class $modify(BGLHook, GJBaseGameLayer) {
     }
 
     void handleButton(bool hold, int button, bool player2) {
-        auto &g = Global::get();
+        auto& g = Global::get();
 
         if (g.p2mirror && m_gameState.m_isDualMode && !g.autoclicker) {
             GJBaseGameLayer::handleButton(
-                g.mod->getSavedValue<bool>("p2_input_mirror_inverted") ? !hold
-                                                                       : hold,
-                button, !player2);
+                g.mod->getSavedValue<bool>("p2_input_mirror_inverted") ? !hold : hold,
+                button,
+                !player2);
         }
 
         if (g.state == state::none)
             return GJBaseGameLayer::handleButton(hold, button, player2);
 
         if (g.state == state::playing) {
-            if (g.mod->getSavedValue<bool>("macro_ignore_inputs") &&
-                !m_fields->macroInput)
+            if (g.mod->getSavedValue<bool>("macro_ignore_inputs") && !m_fields->macroInput)
                 return;
             else
                 return GJBaseGameLayer::handleButton(hold, button, player2);
@@ -403,44 +398,43 @@ class $modify(BGLHook, GJBaseGameLayer) {
             if (!m_levelSettings->m_twoPlayerMode)
                 player2 = false;
 
-            if (!g.ignoreRecordAction && !g.creatingTrajectory &&
-                !m_player1->m_isDead) {
+            if (!g.ignoreRecordAction && !g.creatingTrajectory && !m_player1->m_isDead) {
                 int idx = buttonIndex[player2 ? 1 : 0].at(button);
 
                 g.macro.recordAction(frame, button, player2, hold);
                 if (g.p2mirror && m_gameState.m_isDualMode)
                     g.macro.recordAction(
-                        frame, button, !player2,
-                        g.mod->getSavedValue<bool>("p2_input_mirror_inverted")
-                            ? !hold
-                            : hold);
+                        frame,
+                        button,
+                        !player2,
+                        g.mod->getSavedValue<bool>("p2_input_mirror_inverted") ? !hold : hold);
             }
         }
     };
 
     class $modify(PauseLayer) {
 
-        void onPracticeMode(CCObject *sender) {
+        void onPracticeMode(CCObject* sender) {
             PauseLayer::onPracticeMode(sender);
             if (Global::get().state != state::none)
                 PlayLayer::get()->resetLevel();
         }
 
-        void onNormalMode(CCObject *sender) {
+        void onNormalMode(CCObject* sender) {
             PauseLayer::onNormalMode(sender);
-            auto &g = Global::get();
+            auto& g = Global::get();
             g.checkpoints.clear();
             if (g.restart) {
-                if (PlayLayer *pl = PlayLayer::get())
+                if (PlayLayer* pl = PlayLayer::get())
                     pl->resetLevel();
             }
         }
 
-        void onQuit(CCObject *sender) {
+        void onQuit(CCObject* sender) {
             PauseLayer::onQuit(sender);
             Macro::resetState();
             Loader::get()->queueInMainThread([] {
-                auto &g = Global::get();
+                auto& g = Global::get();
 #ifndef GEODE_IS_IOS
                 if (g.renderer.recording)
                     g.renderer.stop();
@@ -452,7 +446,7 @@ class $modify(BGLHook, GJBaseGameLayer) {
             PauseLayer::goEdit();
             Macro::resetState();
             Loader::get()->queueInMainThread([] {
-                auto &g = Global::get();
+                auto& g = Global::get();
 #ifndef GEODE_IS_IOS
                 if (g.renderer.recording)
                     g.renderer.stop();

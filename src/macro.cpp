@@ -5,11 +5,11 @@
 #include <Geode/modify/PlayLayer.hpp>
 
 void Macro::recordAction(int frame, int button, bool player2, bool hold) {
-    PlayLayer *pl = PlayLayer::get();
+    PlayLayer* pl = PlayLayer::get();
     if (!pl)
         return;
 
-    auto &g = Global::get();
+    auto& g = Global::get();
 
     if (g.macro.inputs.empty())
         Macro::updateInfo(pl);
@@ -21,7 +21,7 @@ void Macro::recordAction(int frame, int button, bool player2, bool hold) {
         player2 = !player2;
 
     for (int i = (int)g.macro.inputs.size() - 1; i >= 0; i--) {
-        auto &last = g.macro.inputs[i];
+        auto& last = g.macro.inputs[i];
         if (last.button == button && last.player2 == player2) {
             if (last.down == hold)
                 return;
@@ -32,7 +32,7 @@ void Macro::recordAction(int frame, int button, bool player2, bool hold) {
     if (!hold) {
         bool hasPress = false;
         for (int i = (int)g.macro.inputs.size() - 1; i >= 0; i--) {
-            auto &inp = g.macro.inputs[i];
+            auto& inp = g.macro.inputs[i];
             if (inp.button == button && inp.player2 == player2 && inp.down) {
                 hasPress = true;
                 break;
@@ -45,7 +45,7 @@ void Macro::recordAction(int frame, int button, bool player2, bool hold) {
     g.macro.inputs.push_back(input(frame, button, player2, hold));
 }
 
-void Macro::recordFrameFix(int frame, PlayerObject *p1, PlayerObject *p2) {
+void Macro::recordFrameFix(int frame, PlayerObject* p1, PlayerObject* p2) {
     float p1Rotation = p1->getRotation();
     float p2Rotation = p2->getRotation();
 
@@ -77,33 +77,28 @@ void Macro::recordFrameFix(int frame, PlayerObject *p1, PlayerObject *p2) {
 }
 
 bool Macro::flipControls() {
-    PlayLayer *pl = PlayLayer::get();
+    PlayLayer* pl = PlayLayer::get();
     if (!pl)
-        return GameManager::get()->getGameVariable(
-            GameVar::Flip2PlayerControls);
+        return GameManager::get()->getGameVariable(GameVar::Flip2PlayerControls);
 
     return pl->m_isPlatformer ? false
-                              : GameManager::get()->getGameVariable(
-                                    GameVar::Flip2PlayerControls);
+                              : GameManager::get()->getGameVariable(GameVar::Flip2PlayerControls);
 }
 
-void Macro::autoSave(GJGameLevel *level, int number) {
+void Macro::autoSave(GJGameLevel* level, int number) {
     if (!level)
-        level =
-            PlayLayer::get() != nullptr ? PlayLayer::get()->m_level : nullptr;
+        level = PlayLayer::get() != nullptr ? PlayLayer::get()->m_level : nullptr;
     if (!level)
         return;
 
     std::string levelname = level->m_levelName;
 #ifdef GEODE_IS_IOS
-    std::filesystem::path autoSavesPath =
-        Mod::get()->getSaveDir() / "autosaves";
+    std::filesystem::path autoSavesPath = Mod::get()->getSaveDir() / "autosaves";
 #else
     std::filesystem::path autoSavesPath =
         Mod::get()->getSettingValue<std::filesystem::path>("autosaves_folder");
 #endif
-    std::filesystem::path path =
-        autoSavesPath / fmt::format("autosave_{}_{}", levelname, number);
+    std::filesystem::path path = autoSavesPath / fmt::format("autosave_{}_{}", levelname, number);
 
     if (!std::filesystem::exists(autoSavesPath))
         return;
@@ -111,16 +106,16 @@ void Macro::autoSave(GJGameLevel *level, int number) {
     std::string username = GJAccountManager::sharedState() != nullptr
                                ? GJAccountManager::sharedState()->m_username
                                : "";
-    int result = Macro::save(
-        username, fmt::format("AutoSave {} in level {}", number, levelname),
-        geode::utils::string::pathToString(path));
+    int result = Macro::save(username,
+                             fmt::format("AutoSave {} in level {}", number, levelname),
+                             geode::utils::string::pathToString(path));
 
     if (result != 0)
         log::debug("Failed to autosave macro. ID: {}. Path: {}", result, path);
 }
 
-void Macro::tryAutosave(GJGameLevel *level, CheckpointObject *cp) {
-    auto &g = Global::get();
+void Macro::tryAutosave(GJGameLevel* level, CheckpointObject* cp) {
+    auto& g = Global::get();
 
     if (g.state != state::recording)
         return;
@@ -141,24 +136,22 @@ void Macro::tryAutosave(GJGameLevel *level, CheckpointObject *cp) {
 
     std::string levelname = level->m_levelName;
     std::filesystem::path path =
-        autoSavesPath /
-        fmt::format("autosave_{}_{}", levelname, g.currentSession);
+        autoSavesPath / fmt::format("autosave_{}_{}", levelname, g.currentSession);
     std::error_code ec;
-    std::filesystem::remove(geode::utils::string::pathToString(path) + ".gdr",
-                            ec);
+    std::filesystem::remove(geode::utils::string::pathToString(path) + ".gdr", ec);
     if (ec)
         log::warn("Failed to remove previous autosave");
 
     autoSave(level, g.currentSession);
 }
 
-void Macro::updateInfo(PlayLayer *pl) {
+void Macro::updateInfo(PlayLayer* pl) {
     if (!pl)
         return;
 
-    auto &g = Global::get();
+    auto& g = Global::get();
 
-    GJGameLevel *level = pl->m_level;
+    GJGameLevel* level = pl->m_level;
     if (level->m_lowDetailModeToggled != g.macro.ldm)
         g.macro.ldm = level->m_lowDetailModeToggled;
 
@@ -183,7 +176,7 @@ void Macro::updateInfo(PlayLayer *pl) {
 }
 
 void Macro::updateTPS() {
-    auto &g = Global::get();
+    auto& g = Global::get();
 
     if (g.state != state::none && !g.macro.inputs.empty()) {
         g.previousTpsEnabled = g.tpsEnabled;
@@ -200,7 +193,7 @@ void Macro::updateTPS() {
     }
 
     if (g.layer)
-        static_cast<RecordLayer *>(g.layer)->updateTPS();
+        static_cast<RecordLayer*>(g.layer)->updateTPS();
 }
 
 LegacyMacro Macro::toLegacy() const {
@@ -218,9 +211,9 @@ LegacyMacro Macro::toLegacy() const {
     legacy.levelInfo.id = levelInfo.id;
     legacy.levelInfo.name = levelInfo.name;
 
-    for (const auto &inp : inputs) {
-        legacy.inputs.push_back(legacy_input(
-            static_cast<int>(inp.frame), inp.button, inp.player2, inp.down));
+    for (const auto& inp : inputs) {
+        legacy.inputs.push_back(
+            legacy_input(static_cast<int>(inp.frame), inp.button, inp.player2, inp.down));
     }
 
     legacy.frameFixes = frameFixes;
@@ -228,13 +221,12 @@ LegacyMacro Macro::toLegacy() const {
     return legacy;
 }
 
-Macro Macro::fromLegacy(const LegacyMacro &legacy) {
+Macro Macro::fromLegacy(const LegacyMacro& legacy) {
     Macro macro;
     macro.author = legacy.author;
     macro.description = legacy.description;
     macro.duration = legacy.duration;
-    macro.gameVersion =
-        static_cast<int>(std::round(legacy.gameVersion * 1000.0f));
+    macro.gameVersion = static_cast<int>(std::round(legacy.gameVersion * 1000.0f));
     macro.framerate = legacy.framerate;
     macro.seed = legacy.seed;
     macro.coins = legacy.coins;
@@ -245,19 +237,18 @@ Macro Macro::fromLegacy(const LegacyMacro &legacy) {
     if (firstSpace != std::string::npos)
         versionStr = versionStr.substr(0, firstSpace);
 
-    float parsedVer =
-        geode::utils::numFromString<float>(versionStr).unwrapOr(0.f);
+    float parsedVer = geode::utils::numFromString<float>(versionStr).unwrapOr(0.f);
     macro.botInfo.version = static_cast<int>(std::round(parsedVer * 1000.f));
-    macro.isLegacy =
-        macro.botInfo.name == "xdBot" && macro.botInfo.version < 2208;
+    macro.isLegacy = macro.botInfo.name == "xdBot" && macro.botInfo.version < 2208;
     macro.levelInfo.id = legacy.levelInfo.id;
     macro.levelInfo.name = legacy.levelInfo.name;
     macro.frameFixes = legacy.frameFixes;
 
-    for (const auto &inp : legacy.inputs) {
+    for (const auto& inp : legacy.inputs) {
         macro.inputs.push_back(input(static_cast<uint64_t>(inp.frame),
                                      static_cast<uint8_t>(inp.button),
-                                     inp.player2, inp.down));
+                                     inp.player2,
+                                     inp.down));
     }
 
     macro.xdBotMacro = legacy.botInfo.name == "xdBot";
@@ -280,10 +271,10 @@ std::vector<uint8_t> Macro::exportJSON() {
     return legacy.exportData(true);
 }
 
-void Macro::saveExtension(binary_writer &writer) const {
+void Macro::saveExtension(binary_writer& writer) const {
     writer << static_cast<uint64_t>(frameFixes.size());
 
-    for (const auto &fix : frameFixes) {
+    for (const auto& fix : frameFixes) {
         writer << static_cast<uint64_t>(fix.frame);
         writer << fix.p1.pos.x;
         writer << fix.p1.pos.y;
@@ -296,7 +287,7 @@ void Macro::saveExtension(binary_writer &writer) const {
     }
 }
 
-void Macro::parseExtension(binary_reader &reader) {
+void Macro::parseExtension(binary_reader& reader) {
     uint64_t count = 0;
     reader >> count;
 
@@ -322,9 +313,8 @@ void Macro::parseExtension(binary_reader &reader) {
     }
 }
 
-Macro Macro::importData(std::vector<uint8_t> &data) {
-    if (data.size() >= 3 && data[0] == 'G' && data[1] == 'D' &&
-        data[2] == 'R') {
+Macro Macro::importData(std::vector<uint8_t>& data) {
+    if (data.size() >= 3 && data[0] == 'G' && data[1] == 'D' && data[2] == 'R') {
         std::span<uint8_t> span(data.data(), data.size());
         auto result = gdr::Replay<Macro, input>::importData(span);
         if (result.isOk()) {
@@ -358,9 +348,8 @@ Macro Macro::importData(std::vector<uint8_t> &data) {
     return Macro();
 }
 
-int Macro::save(std::string author, std::string desc, std::string path,
-                SaveFormat format) {
-    auto &g = Global::get();
+int Macro::save(std::string author, std::string desc, std::string path, SaveFormat format) {
+    auto& g = Global::get();
 
     if (g.macro.inputs.empty())
         return 31;
@@ -444,8 +433,8 @@ Macro Macro::XDtoGDR(std::filesystem::path path) {
     Macro newMacro;
     newMacro.author = "N/A";
     newMacro.description = "N/A";
-    newMacro.gameVersion = static_cast<int>(
-        std::round(static_cast<double>(GEODE_GD_VERSION) * 1000.0));
+    newMacro.gameVersion =
+        static_cast<int>(std::round(static_cast<double>(GEODE_GD_VERSION) * 1000.0));
 
     auto readResult = geode::utils::file::readString(path);
     if (readResult.isErr()) {
@@ -456,7 +445,7 @@ Macro Macro::XDtoGDR(std::filesystem::path path) {
     float fpsMultiplier = 1.f;
 
     auto lines = geode::utils::string::split(readResult.unwrap(), "\n");
-    for (auto &line : lines) {
+    for (auto& line : lines) {
         auto action = geode::utils::string::split(line, "|");
 
         if (action.empty())
@@ -467,15 +456,12 @@ Macro Macro::XDtoGDR(std::filesystem::path path) {
                 fpsMultiplier = 4.f;
             else
                 fpsMultiplier =
-                    240.f /
-                    geode::utils::numFromString<float>(action[0]).unwrapOr(
-                        240.f);
+                    240.f / geode::utils::numFromString<float>(action[0]).unwrapOr(240.f);
             continue;
         }
 
         int frame = static_cast<int>(
-            round(geode::utils::numFromString<float>(action[0]).unwrapOr(0.f) *
-                  fpsMultiplier));
+            round(geode::utils::numFromString<float>(action[0]).unwrapOr(0.f) * fpsMultiplier));
         int button = geode::utils::numFromString<int>(action[2]).unwrapOr(0);
         bool hold = action[1] == "1";
         bool player2 = action[3] == "1";
@@ -484,14 +470,13 @@ Macro Macro::XDtoGDR(std::filesystem::path path) {
         if (!posOnly)
             newMacro.inputs.push_back(input(frame, button, player2, hold));
         else {
-            cocos2d::CCPoint p1Pos = ccp(
-                geode::utils::numFromString<float>(action[5]).unwrapOr(0.f),
-                geode::utils::numFromString<float>(action[6]).unwrapOr(0.f));
-            cocos2d::CCPoint p2Pos = ccp(
-                geode::utils::numFromString<float>(action[11]).unwrapOr(0.f),
-                geode::utils::numFromString<float>(action[12]).unwrapOr(0.f));
-            newMacro.frameFixes.push_back(
-                {frame, {p1Pos, 0.f, false}, {p2Pos, 0.f, false}});
+            cocos2d::CCPoint p1Pos =
+                ccp(geode::utils::numFromString<float>(action[5]).unwrapOr(0.f),
+                    geode::utils::numFromString<float>(action[6]).unwrapOr(0.f));
+            cocos2d::CCPoint p2Pos =
+                ccp(geode::utils::numFromString<float>(action[11]).unwrapOr(0.f),
+                    geode::utils::numFromString<float>(action[12]).unwrapOr(0.f));
+            newMacro.frameFixes.push_back({frame, {p1Pos, 0.f, false}, {p2Pos, 0.f, false}});
         }
     }
 
@@ -501,7 +486,7 @@ Macro Macro::XDtoGDR(std::filesystem::path path) {
 }
 
 void Macro::resetState(bool cp) {
-    auto &g = Global::get();
+    auto& g = Global::get();
 
     g.restart = false;
     g.state = state::none;
@@ -514,43 +499,40 @@ void Macro::resetState(bool cp) {
 }
 
 void Macro::togglePlaying() {
-    if (Global::hasIncompatibleMods() ||
-        Global::enabledIncompatibleGDSettings())
+    if (Global::hasIncompatibleMods() || Global::enabledIncompatibleGDSettings())
         return;
 
-    auto &g = Global::get();
+    auto& g = Global::get();
 
     if (g.layer) {
-        static_cast<RecordLayer *>(g.layer)->playing->toggle(
-            Global::get().state != state::playing);
-        static_cast<RecordLayer *>(g.layer)->togglePlaying(nullptr);
+        static_cast<RecordLayer*>(g.layer)->playing->toggle(Global::get().state != state::playing);
+        static_cast<RecordLayer*>(g.layer)->togglePlaying(nullptr);
     } else {
-        RecordLayer *layer = RecordLayer::create();
+        RecordLayer* layer = RecordLayer::create();
         layer->togglePlaying(nullptr);
         layer->onClose(nullptr);
     }
 }
 
 void Macro::toggleRecording() {
-    if (Global::hasIncompatibleMods() ||
-        Global::enabledIncompatibleGDSettings())
+    if (Global::hasIncompatibleMods() || Global::enabledIncompatibleGDSettings())
         return;
 
-    auto &g = Global::get();
+    auto& g = Global::get();
 
     if (g.layer) {
-        static_cast<RecordLayer *>(g.layer)->recording->toggle(
-            Global::get().state != state::recording);
-        static_cast<RecordLayer *>(g.layer)->toggleRecording(nullptr);
+        static_cast<RecordLayer*>(g.layer)->recording->toggle(Global::get().state !=
+                                                              state::recording);
+        static_cast<RecordLayer*>(g.layer)->toggleRecording(nullptr);
     } else {
-        RecordLayer *layer = RecordLayer::create();
+        RecordLayer* layer = RecordLayer::create();
         layer->toggleRecording(nullptr);
         layer->onClose(nullptr);
     }
 }
 
 bool Macro::shouldStep() {
-    auto &g = Global::get();
+    auto& g = Global::get();
 
     if (g.stepFrame)
         return true;

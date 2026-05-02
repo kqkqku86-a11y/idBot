@@ -8,16 +8,16 @@
 
 class Global {
 
-#define DESELECT_INPUT(node)                                                   \
-    if (node) {                                                                \
-        node->onClickTrackNode(false);                                         \
-        node->setDelegate(nullptr);                                            \
+#define DESELECT_INPUT(node)           \
+    if (node) {                        \
+        node->onClickTrackNode(false); \
+        node->setDelegate(nullptr);    \
     }
 
     Global() {}
 
   public:
-    static auto &get() {
+    static auto& get() {
         static Global instance;
         return instance;
     }
@@ -50,8 +50,8 @@ class Global {
     // @brief Toggle, well, frame stepper
     static void toggleFrameStepper();
 
-    Mod *mod = geode::Mod::get();
-    geode::Popup *layer = nullptr;
+    Mod* mod = geode::Mod::get();
+    geode::Popup* layer = nullptr;
 
     Macro macro;
 #ifndef GEODE_IS_IOS
@@ -60,7 +60,7 @@ class Global {
     state state = none;
 
     geode::utils::random::Generator gen;
-    std::unordered_map<CheckpointObject *, CheckpointData> checkpoints;
+    std::unordered_map<CheckpointObject*, CheckpointData> checkpoints;
     std::unordered_set<int> allKeybinds;
     std::unordered_set<int> playedFrames;
     std::vector<int> keybinds[6];
@@ -121,8 +121,7 @@ class Global {
         tps = newTps;
         mod->setSavedValue("macro_tps", static_cast<double>(newTps));
         if (Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
-            eclipse::config::setInternal("global.tpsbypass",
-                                         static_cast<double>(newTps));
+            eclipse::config::setInternal("global.tpsbypass", static_cast<double>(newTps));
         } else {
             if (onTpsChanged)
                 onTpsChanged(static_cast<double>(newTps));
