@@ -144,6 +144,8 @@ class Global {
     int previousFrame = 0;
 
     int m_frameCount = 0;
+    double schedulerOverflow = 0.0;
+    bool schedulerUpdating = false;
 
     size_t currentAction = 0;
     size_t currentFrameFix = 0;

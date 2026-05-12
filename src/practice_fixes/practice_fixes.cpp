@@ -12,6 +12,39 @@ static std::vector<GameObject*>& brokenPracticeObjects() {
     return objects;
 }
 
+struct HeldButtonState {
+    bool p1Holding = false;
+    bool p2Holding = false;
+    bool p1Left = false;
+    bool p1Right = false;
+    bool p2Left = false;
+    bool p2Right = false;
+    bool valid = false;
+
+    void capture(PlayLayer* pl) {
+        valid = false;
+        if (!pl || !pl->m_uiLayer)
+            return;
+
+        p1Holding = pl->m_uiLayer->m_p1Jumping || pl->m_uiLayer->m_p1TouchId != -1;
+        p2Holding = pl->m_uiLayer->m_p2Jumping || pl->m_uiLayer->m_p2TouchId != -1;
+        if (pl->m_player1) {
+            p1Left = pl->m_player1->m_holdingLeft || pl->m_player1->m_holdingButtons[2];
+            p1Right = pl->m_player1->m_holdingRight || pl->m_player1->m_holdingButtons[3];
+        }
+        if (pl->m_player2) {
+            p2Left = pl->m_player2->m_holdingLeft || pl->m_player2->m_holdingButtons[2];
+            p2Right = pl->m_player2->m_holdingRight || pl->m_player2->m_holdingButtons[3];
+        }
+        valid = true;
+    }
+};
+
+static HeldButtonState& heldButtonState() {
+    static HeldButtonState state;
+    return state;
+}
+
 struct PracticeCheckpointData {
     SupplementalPlayerState p1, p2;
     SupplementalPlayLayerState pl;
@@ -181,24 +214,10 @@ class $modify(FixPlayLayer, PlayLayer) {
     void resetLevel() {
         bool hadCheckpoints = m_checkpointArray->count() > 0;
         bool shouldRestoreHeldButtons = PracticeFix::shouldEnable() && hadCheckpoints;
-        bool p1Holding = false;
-        bool p2Holding = false;
-        bool p1Left = false;
-        bool p1Right = false;
-        bool p2Left = false;
-        bool p2Right = false;
+        auto held = heldButtonState();
 
-        if (shouldRestoreHeldButtons && m_uiLayer) {
-            p1Holding = m_uiLayer->m_p1Jumping || m_uiLayer->m_p1TouchId != -1;
-            p2Holding = m_uiLayer->m_p2Jumping || m_uiLayer->m_p2TouchId != -1;
-            if (m_player1) {
-                p1Left = m_player1->m_holdingLeft || m_player1->m_holdingButtons[2];
-                p1Right = m_player1->m_holdingRight || m_player1->m_holdingButtons[3];
-            }
-            if (m_player2) {
-                p2Left = m_player2->m_holdingLeft || m_player2->m_holdingButtons[2];
-                p2Right = m_player2->m_holdingRight || m_player2->m_holdingButtons[3];
-            }
+        if (shouldRestoreHeldButtons && !held.valid) {
+            held.capture(this);
         }
 
         if (!hadCheckpoints) {
@@ -223,20 +242,22 @@ class $modify(FixPlayLayer, PlayLayer) {
                 this->queueButton(button, down, player2, 0.0);
             };
 
-            queueIfChanged(1, p1Holding, false);
+            queueIfChanged(1, held.p1Holding, false);
             if (m_isPlatformer) {
-                queueIfChanged(2, p1Left, false);
-                queueIfChanged(3, p1Right, false);
+                queueIfChanged(2, held.p1Left, false);
+                queueIfChanged(3, held.p1Right, false);
             }
 
             if (m_gameState.m_isDualMode && m_levelSettings->m_twoPlayerMode) {
-                queueIfChanged(1, p2Holding, true);
+                queueIfChanged(1, held.p2Holding, true);
                 if (m_isPlatformer) {
-                    queueIfChanged(2, p2Left, true);
-                    queueIfChanged(3, p2Right, true);
+                    queueIfChanged(2, held.p2Left, true);
+                    queueIfChanged(3, held.p2Right, true);
                 }
             }
         }
+
+        heldButtonState().valid = false;
     }
 
 };
@@ -262,14 +283,17 @@ class $modify(FixPlayerObject, PlayerObject) {
             return;
         }
         auto* gjbgl = GJBaseGameLayer::get();
+        auto& held = heldButtonState();
         if (this == gjbgl->m_player2 && !gjbgl->m_gameState.m_isDualMode) {
             PlayerObject::releaseAllButtons();
             return;
         }
         bool isP2 = this == gjbgl->m_player2;
-        bool holding = isP2
-            ? (gjbgl->m_uiLayer->m_p2Jumping || gjbgl->m_uiLayer->m_p2TouchId != -1)
-            : (gjbgl->m_uiLayer->m_p1Jumping || gjbgl->m_uiLayer->m_p1TouchId != -1);
+        bool holding = held.valid
+            ? (isP2 ? held.p2Holding : held.p1Holding)
+            : (isP2
+                ? (gjbgl->m_uiLayer->m_p2Jumping || gjbgl->m_uiLayer->m_p2TouchId != -1)
+                : (gjbgl->m_uiLayer->m_p1Jumping || gjbgl->m_uiLayer->m_p1TouchId != -1));
         if (!holding)
             PlayerObject::releaseAllButtons();
     }
@@ -287,6 +311,9 @@ class $modify(FixUILayer, UILayer) {
             && down
             && key == enumKeyCodes::KEY_R
             && pl->m_checkpointArray->count() > 0;
+
+        if (shouldPreserve)
+            heldButtonState().capture(pl);
 
         bool p1Jumping = m_p1Jumping;
         bool p2Jumping = m_p2Jumping;

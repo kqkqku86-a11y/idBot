@@ -228,7 +228,7 @@ int Global::getCurrentFrame(bool editor) {
 }
 
 class $modify(FrameCounterGJBaseGameLayer, GJBaseGameLayer) {
-    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+    void processQueuedButtons(float dt, bool clearInputQueue) {
         auto& g = Global::get();
         auto* playLayer = PlayLayer::get();
         bool isPlaying = playLayer && !playLayer->m_hasCompletedLevel && !playLayer->m_isPaused &&
@@ -240,10 +240,10 @@ class $modify(FrameCounterGJBaseGameLayer, GJBaseGameLayer) {
             g.setTpsEnabled(true);
         }
 
-        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+        GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
         if (isPlaying) {
-            g.m_frameCount = m_gameState.m_currentProgress / 2;
+            g.m_frameCount++;
         }
     }
 };

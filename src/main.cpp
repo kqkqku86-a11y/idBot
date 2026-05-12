@@ -46,7 +46,7 @@ class $modify(PlayLayer) {
         PlayLayer::postUpdate(dt);
         auto& g = Global::get();
         if (m_fields->delayedLevelRestart != -1 &&
-            m_fields->delayedLevelRestart >= Global::getCurrentFrame()) {
+            m_fields->delayedLevelRestart <= Global::getCurrentFrame()) {
             m_fields->delayedLevelRestart = -1;
             resetLevelFromStart();
         }
@@ -133,15 +133,15 @@ class $modify(BGLHook, GJBaseGameLayer) {
 
     struct Fields {
         bool macroInput = false;
+        size_t queuedMacroInputs = 0;
     };
 
-#ifndef GEODE_IS_MACOS
-    void processCommands(float dt, bool isHalfTick, bool isLastTick) {
+    void processQueuedButtons(float dt, bool clearInputQueue) {
         auto& g = Global::get();
         PlayLayer* pl = PlayLayer::get();
 
         if (!pl)
-            return GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+            return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
         Global::updateSeed();
 
@@ -161,83 +161,31 @@ class $modify(BGLHook, GJBaseGameLayer) {
             }
 
             if (g.previousFrame == frame && frame != 0 && g.macro.xdBotMacro)
-                return GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
+                return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
         }
 
-        GJBaseGameLayer::processCommands(dt, isHalfTick, isLastTick);
-
-        if (g.state == state::none)
-            return;
-
         int frame = Global::getCurrentFrame();
-        g.previousFrame = frame;
 
         if (g.macro.xdBotMacro && g.restart && !m_levelEndAnimationStarted) {
-#ifndef GEODE_IS_MOBILE
             if ((m_isPlatformer && g.state != state::none))
                 return pl->resetLevelFromStart();
             else
                 return pl->resetLevel();
-#else
-            if (m_isPlatformer && g.state != state::none)
-                return pl->resetLevelFromStart();
-            else
-                return pl->resetLevel();
-#endif
         }
 
-        if (g.state == state::recording)
-            handleRecording(frame);
         if (g.state == state::playing)
-            handlePlaying(Global::getCurrentFrame());
-    }
-#else
-    void processQueuedButtons(float dt, bool clearInputQueue) {
-        auto& g = Global::get();
-        PlayLayer* pl = PlayLayer::get();
-
-        if (!pl)
-            return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
-
-        Global::updateSeed();
-
-        bool rendering = false;
-
-        if (g.state != state::none || rendering) {
-            int frame = Global::getCurrentFrame();
-            if (frame > 2 && g.firstAttempt && g.macro.xdBotMacro) {
-                g.firstAttempt = false;
-                if ((m_isPlatformer || rendering) && !m_levelEndAnimationStarted)
-                    return pl->resetLevelFromStart();
-                else if (!m_levelEndAnimationStarted)
-                    return pl->resetLevel();
-            }
-
-            if (g.previousFrame == frame && frame != 0 && g.macro.xdBotMacro)
-                return GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
-        }
+            handlePlaying(frame);
 
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
         if (g.state == state::none)
             return;
 
-        int frame = Global::getCurrentFrame();
         g.previousFrame = frame;
-
-        if (g.macro.xdBotMacro && g.restart && !m_levelEndAnimationStarted) {
-            if ((m_isPlatformer && g.state != state::none))
-                return pl->resetLevelFromStart();
-            else
-                return pl->resetLevel();
-        }
 
         if (g.state == state::recording)
             handleRecording(frame);
-        if (g.state == state::playing)
-            handlePlaying(Global::getCurrentFrame());
     }
-#endif
 
     void handleRecording(int frame) {
         auto& g = Global::get();
@@ -267,7 +215,8 @@ class $modify(BGLHook, GJBaseGameLayer) {
             if (frame != g.respawnFrame) {
                 if (Macro::flipControls())
                     input.player2 = !input.player2;
-                GJBaseGameLayer::handleButton(input.down, input.button, input.player2);
+                m_fields->queuedMacroInputs++;
+                queueButton(input.button, input.down, input.player2, 0.0);
             }
             g.currentAction++;
             g.safeMode = true;
@@ -326,7 +275,12 @@ class $modify(BGLHook, GJBaseGameLayer) {
             return GJBaseGameLayer::handleButton(hold, button, player2);
 
         if (g.state == state::playing) {
-            if (g.mod->getSavedValue<bool>("macro_ignore_inputs") && !m_fields->macroInput)
+            bool queuedMacroInput = m_fields->queuedMacroInputs > 0;
+            if (queuedMacroInput)
+                m_fields->queuedMacroInputs--;
+
+            if (g.mod->getSavedValue<bool>("macro_ignore_inputs") && !m_fields->macroInput &&
+                !queuedMacroInput)
                 return;
 
             return GJBaseGameLayer::handleButton(hold, button, player2);

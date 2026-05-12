@@ -17,7 +17,13 @@ class $modify(CCScheduler) {
     void update(float dt) {
         auto& g = Global::get();
 
-        if (g.state == state::none && !g.speedhackEnabled) {
+        if (g.schedulerUpdating)
+            return CCScheduler::update(dt);
+
+        if (g.state == state::playing && !g.tpsEnabled && g.macro.framerate != 240.f)
+            g.setTpsEnabled(true);
+
+        if (g.state == state::none && !g.speedhackEnabled && !g.tpsEnabled) {
             if (g.currentPitch != 1.f)
                 Global::updatePitch(1.f);
 
@@ -67,7 +73,29 @@ class $modify(CCScheduler) {
         if (speedhack != 1.f && PlayLayer::get())
             g.safeMode = true;
 
-        CCScheduler::update(dt * speedhack);
+        auto* pl = PlayLayer::get();
+        if (!pl || pl->m_isPaused || g.frameStepper) {
+            return CCScheduler::update(dt * speedhack);
+        }
+
+        double timestep = 1.0 / static_cast<double>(Global::getTPS());
+        double timeWarp = std::min(static_cast<double>(pl->m_gameState.m_timeWarp), 1.0);
+        timestep *= timeWarp;
+        if (timestep <= 0.0)
+            timestep = 1.0 / static_cast<double>(Global::getTPS());
+
+        g.schedulerOverflow += static_cast<double>(dt) * speedhack;
+        int steps = static_cast<int>(std::floor(g.schedulerOverflow / timestep));
+
+        if (steps <= 0)
+            return;
+
+        g.schedulerOverflow -= static_cast<double>(steps) * timestep;
+        g.schedulerUpdating = true;
+        for (int i = 0; i < steps; i++) {
+            CCScheduler::update(static_cast<float>(timestep));
+        }
+        g.schedulerUpdating = false;
     }
 
 };

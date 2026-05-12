@@ -192,6 +192,7 @@ struct SupplementalPlayerState {
     double m_lastFlipTime = 0.0;
     bool m_hasGlow = false;
     int m_dashFireFrame = 0;
+    cocos2d::CCPoint m_position = {};
     double m_positionX = 0.0;
     double m_positionY = 0.0;
     float m_rotation = 0.0f;
@@ -393,6 +394,7 @@ struct SupplementalPlayerState {
         m_lastFlipTime                  = p->m_lastFlipTime;
         m_hasGlow                       = p->m_hasGlow;
         m_dashFireFrame                 = p->m_dashFireFrame;
+        m_position                      = p->getPosition();
         m_positionX                     = p->m_positionX;
         m_positionY                     = p->m_positionY;
         m_rotation                      = p->getRotation();
@@ -413,6 +415,8 @@ struct SupplementalPlayerState {
 
     void apply(PlayerObject* p) const {
         if (!p) return;
+        p->setPosition(m_position);
+        p->m_yVelocity                      = m_yVelocity;
         p->m_platformerXVelocity            = m_platformerXVelocity;
         p->m_isOnGround                     = m_isOnGround;
         p->m_lastPortalPos                  = m_lastPortalPos;
@@ -423,6 +427,7 @@ struct SupplementalPlayerState {
         p->m_affectedByForces               = m_affectedByForces;
         p->m_jumpBuffered                   = m_jumpBuffered;
         p->m_rotationSpeed                  = m_rotationSpeed;
+        p->m_isRotating                     = m_isRotating;
         p->m_isBallRotating                 = m_isBallRotating;
         p->m_isBallRotating2                = m_isBallRotating2;
         p->m_stateRingJump                  = m_stateRingJump;
@@ -601,6 +606,7 @@ struct SupplementalPlayerState {
         p->m_rotateObjectsRelated           = m_rotateObjectsRelated;
         p->m_potentialSlopeMap              = m_potentialSlopeMap;
         p->m_ringRelatedSet                 = m_ringRelatedSet;
+        p->m_touchedRings                   = m_touchedRings;
         p->m_jumpPadRelated                 = m_jumpPadRelated;
         p->m_playerFollowFloats             = m_playerFollowFloats;
         p->m_currentRobotAnimation          = m_currentRobotAnimation;

@@ -236,7 +236,7 @@ Macro Macro::fromLegacy(const LegacyMacro& legacy) {
 
     float parsedVer = geode::utils::numFromString<float>(versionStr).unwrapOr(0.f);
     macro.botInfo.version = static_cast<int>(std::round(parsedVer * 1000.f));
-    macro.isLegacy = macro.botInfo.name == "xdBot" && macro.botInfo.version < 2208;
+    macro.isLegacy = macro.botInfo.name == "xdBot" && macro.botInfo.version < 2600;
     macro.levelInfo.id = legacy.levelInfo.id;
     macro.levelInfo.name = legacy.levelInfo.name;
     macro.frameFixes = legacy.frameFixes;
@@ -249,7 +249,6 @@ Macro Macro::fromLegacy(const LegacyMacro& legacy) {
     }
 
     macro.xdBotMacro = legacy.botInfo.name == "xdBot";
-    macro.isLegacy = true;
 
     return macro;
 }
@@ -477,9 +476,9 @@ Macro Macro::XDtoGDR(std::filesystem::path path) {
         }
     }
 
-    return newMacro;
     newMacro.xdBotMacro = true;
     newMacro.isLegacy = true;
+    return newMacro;
 }
 
 void Macro::resetState(bool cp) {
