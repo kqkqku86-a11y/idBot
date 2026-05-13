@@ -483,7 +483,10 @@ void RecordLayer::toggleSetting(CCObject *obj) {
     }
 
     if (id == "macro_frame_stepper") {
+        bool wasEnabled = g.frameStepper;
         g.frameStepper = value;
+        if (wasEnabled && !g.frameStepper)
+            Global::syncFrameStepperMusic();
         Interface::updateButtons();
     }
 
@@ -1070,9 +1073,7 @@ void RecordLayer::loadSetting(RecordSetting sett, float yPos) {
         tpsInput = TextInput::create(32.f, "tps", "chatFont.fnt");
         tpsInput->setPosition(ccp(133.5, yPos));
         tpsInput->setFilter("0123456789.");
-        tpsInput->setString(
-            fmt::format("{:.3}", Mod::get()->getSavedValue<double>("macro_tps"))
-        );
+        tpsInput->setString(fmt::format("{:.0f}", Mod::get()->getSavedValue<double>("macro_tps")));
         tpsInput->setDelegate(this);
         tpsInput->setMaxCharCount(9);
         tpsInput->getInputNode()->m_textLabel->setAnchorPoint({0.5f, 0.5f});
@@ -1179,8 +1180,7 @@ void RecordLayer::updateTPS() {
     auto &g = Global::get();
 
     tpsToggle->toggle(g.tpsEnabled);
-    tpsInput->setString(
-        fmt::format("{:.3}", Mod::get()->getSavedValue<double>("macro_tps")));
+    tpsInput->setString(fmt::format("{:.0f}", Mod::get()->getSavedValue<double>("macro_tps")));
 
     if (g.state == state::none || g.macro.inputs.empty()) {
         if (CCMenuItemSpriteExtra *btn =

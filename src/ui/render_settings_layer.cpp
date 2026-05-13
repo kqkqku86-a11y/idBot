@@ -111,6 +111,7 @@ bool RenderSettingsLayer::init() {
 
     argsInput = TextInput::create(170.f, "args", "chatFont.fnt");
     argsInput->setPosition(ccp(41.5f, 87.25f));
+    argsInput->setWidth(139.f);
     argsInput->setString(mod->getSavedValue<std::string>("render_args"));
     argsInput->setDelegate(this);
     argsInput->setFilter(" 0123456789abcdefghijklmnopqrstuvwxyz-_:;.\"\\/[](){}+=<>|!*&'%@");
@@ -118,7 +119,6 @@ bool RenderSettingsLayer::init() {
     argsInput->getInputNode()->m_textLabel->setAnchorPoint({0.5f, 0.5f});
     argsInput->getInputNode()->m_textLabel->setOpacity(150);
     argsInput->getInputNode()->m_textField->setAnchorPoint({0.5f, 0.5f});
-    argsInput->setWidth(139.f);
     argsInput->getBGSprite()->setContentHeight(39.f);
 #ifndef GEODE_IS_IOS
     argsInput->getBGSprite()->setOpacity(usingApi ? 40 : 75);
@@ -140,6 +140,7 @@ bool RenderSettingsLayer::init() {
 
     audioArgsInput = TextInput::create(165.f, "audio args", "chatFont.fnt");
     audioArgsInput->setPosition(ccp(41.f, 55.25f));
+    audioArgsInput->setWidth(142.25f);
     audioArgsInput->setString(mod->getSavedValue<std::string>("render_audio_args"));
     audioArgsInput->setDelegate(this);
     audioArgsInput->setFilter(" 0123456789abcdefghijklmnopqrstuvwxyz-_:;.\"\\/[](){}+=<>|!*&'%@");
@@ -147,7 +148,6 @@ bool RenderSettingsLayer::init() {
     audioArgsInput->getInputNode()->m_textLabel->setAnchorPoint({0.5f, 0.5f});
     audioArgsInput->getInputNode()->m_textLabel->setOpacity(150);
     audioArgsInput->getInputNode()->m_textField->setAnchorPoint({0.5f, 0.5f});
-    audioArgsInput->setWidth(142.25f);
     audioArgsInput->getBGSprite()->setContentHeight(39.f);
 #ifndef GEODE_IS_IOS
     audioArgsInput->getBGSprite()->setOpacity(usingApi ? 40 : 75);
@@ -169,6 +169,7 @@ bool RenderSettingsLayer::init() {
 
     videoArgsInput = TextInput::create(165.f, "video args", "chatFont.fnt");
     videoArgsInput->setPosition({41.f, 24.25f});
+    videoArgsInput->setWidth(140.25f);
 #ifndef GEODE_IS_IOS
     videoArgsInput->setString(usingApi ? "" : mod->getSavedValue<std::string>("render_video_args"));
 #else
@@ -180,7 +181,6 @@ bool RenderSettingsLayer::init() {
     videoArgsInput->getInputNode()->m_textLabel->setAnchorPoint({0.5f, 0.5f});
     videoArgsInput->getInputNode()->m_textLabel->setOpacity(150);
     videoArgsInput->getInputNode()->m_textField->setAnchorPoint({0.5f, 0.5f});
-    videoArgsInput->setWidth(140.25f);
     videoArgsInput->getBGSprite()->setContentHeight(39.f);
 #ifndef GEODE_IS_IOS
     videoArgsInput->getBGSprite()->setOpacity(usingApi ? 40 : 75);

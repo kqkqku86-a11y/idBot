@@ -3,14 +3,19 @@
 #include "../includes.hpp"
 
 const std::vector<std::string> indexToID = {
-    "button_off", "button_advance_frame", "button_speedhack"};
+    "button_off", "button_advance_frame", "button_backstep_frame",
+    "button_speedhack"};
 
 const std::map<std::string, int> IDtoIndex{
-    {"button_off", 0}, {"button_advance_frame", 1}, {"button_speedhack", 2}};
+    {"button_off", 0},
+    {"button_advance_frame", 1},
+    {"button_backstep_frame", 2},
+    {"button_speedhack", 3}};
 
 const std::map<std::string, std::string> IDtoName{
     {"button_off", "Frame Stepper Off"},
     {"button_advance_frame", "Advance Frame"},
+    {"button_backstep_frame", "Backstep Frame"},
     {"button_speedhack", "Toggle Speedhack"}};
 
 struct MovingButton {

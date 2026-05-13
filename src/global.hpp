@@ -33,6 +33,8 @@ class Global {
 
     static void backstepFrame();
 
+    static void syncFrameStepperMusic();
+
     static void toggleFrameStepper();
 
     Mod* mod = geode::Mod::get();
@@ -59,7 +61,6 @@ class Global {
     bool stepFrameDraw = false;
     int stepFrameDrawMultiple = 0;
     int stepFrameParticle = 0;
-    int frameStepperMusicTime = 0;
 
     bool cancelCheckpoint = false;
     bool ignoreRecordAction = false;
@@ -84,6 +85,7 @@ class Global {
     bool trajectoryBothSides = false;
     bool p2mirror = false;
     bool lockDelta = false;
+    bool lockDeltaFast = false;
     bool stopPlaying = false;
     bool tpsEnabled = false;
     float tps = 240.f;
@@ -151,7 +153,6 @@ class Global {
     int schedulerStepCount = 1;
     bool schedulerUpdating = false;
     bool schedulerFrozenUpdate = false;
-    std::vector<input> postUpdateInputs;
 
     size_t currentAction = 0;
     size_t currentFrameFix = 0;

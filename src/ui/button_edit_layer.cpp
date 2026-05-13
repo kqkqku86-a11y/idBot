@@ -17,10 +17,24 @@ $execute{
     g.mod->setSavedValue("button_advance_frame_scale", 0.9f);
     g.mod->setSavedValue("button_advance_frame_opacity", 1.f);
 
+    g.mod->setSavedValue("button_backstep_frame_pos_x", 138.f);
+    g.mod->setSavedValue("button_backstep_frame_pos_y", winSize.height - 50.f);
+    g.mod->setSavedValue("button_backstep_frame_scale", 0.9f);
+    g.mod->setSavedValue("button_backstep_frame_opacity", 1.f);
+
     g.mod->setSavedValue("button_speedhack_pos_x", winSize.width - 62.f);
     g.mod->setSavedValue("button_speedhack_pos_y", winSize.height - 38.f);
     g.mod->setSavedValue("button_speedhack_scale", 1.f);
     g.mod->setSavedValue("button_speedhack_opacity", 1.f);
+  }
+
+  if (!g.mod->setSavedValue("button_defaults6", true)) {
+    cocos2d::CCSize winSize = CCDirector::sharedDirector()->getWinSize();
+
+    g.mod->setSavedValue("button_backstep_frame_pos_x", 138.f);
+    g.mod->setSavedValue("button_backstep_frame_pos_y", winSize.height - 50.f);
+    g.mod->setSavedValue("button_backstep_frame_scale", 0.9f);
+    g.mod->setSavedValue("button_backstep_frame_opacity", 1.f);
   }
 }
 
@@ -195,6 +209,11 @@ bool ButtonEditLayer::init() {
             g.mod->setSavedValue("button_advance_frame_scale", 0.9f);
             g.mod->setSavedValue("button_advance_frame_opacity", 1.f);
 
+            g.mod->setSavedValue("button_backstep_frame_pos_x", 138.f);
+            g.mod->setSavedValue("button_backstep_frame_pos_y", winSize.height - 50.f);
+            g.mod->setSavedValue("button_backstep_frame_scale", 0.9f);
+            g.mod->setSavedValue("button_backstep_frame_opacity", 1.f);
+
             g.mod->setSavedValue("button_speedhack_pos_x", winSize.width - 62.f);
             g.mod->setSavedValue("button_speedhack_pos_y", winSize.height - 38.f);
             g.mod->setSavedValue("button_speedhack_scale", 1.f);
@@ -205,14 +224,17 @@ bool ButtonEditLayer::init() {
             auto winSize2 = CCDirector::sharedDirector()->getWinSize();
             positions["button_off"] = ccp(62.f, winSize2.height - 35.f);
             positions["button_advance_frame"] = ccp(100.f, winSize2.height - 50.f);
+            positions["button_backstep_frame"] = ccp(138.f, winSize2.height - 50.f);
             positions["button_speedhack"] = ccp(winSize2.width - 62.f, winSize2.height - 38.f);
 
             scales["button_off"] = 1.f;
             scales["button_advance_frame"] = 0.9f;
+            scales["button_backstep_frame"] = 0.9f;
             scales["button_speedhack"] = 1.f;
 
             opacities["button_off"] = 1.f;
             opacities["button_advance_frame"] = 1.f;
+            opacities["button_backstep_frame"] = 1.f;
             opacities["button_speedhack"] = 1.f;
 
             if (scaleSlider) scaleSlider->setValue(0.9f);
@@ -311,6 +333,17 @@ void ButtonEditLayer::addSprites() {
     ));
     spr->setScale(mod->getSavedValue<float>("button_advance_frame_scale"));
     spr->setOpacity(static_cast<int>(mod->getSavedValue<float>("button_advance_frame_opacity") * 255));
+    m_mainLayer->addChild(spr);
+    spriteButtons.push_back(spr);
+
+    spr = CCSprite::createWithSpriteFrameName("GJ_arrow_02_001.png");
+    spr->setAnchorPoint({0, 0});
+    spr->setPosition(ccp(
+        mod->getSavedValue<float>("button_backstep_frame_pos_x"),
+        mod->getSavedValue<float>("button_backstep_frame_pos_y")
+    ));
+    spr->setScale(mod->getSavedValue<float>("button_backstep_frame_scale"));
+    spr->setOpacity(static_cast<int>(mod->getSavedValue<float>("button_backstep_frame_opacity") * 255));
     m_mainLayer->addChild(spr);
     spriteButtons.push_back(spr);
 

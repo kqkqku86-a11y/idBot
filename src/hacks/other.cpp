@@ -81,11 +81,11 @@ class $modify(CCScheduler) {
             return CCScheduler::update(dt * speedhack);
         }
 
-        double timestep = 1.0 / static_cast<double>(Global::getTPS());
+        double physicsDt = 1.0 / static_cast<double>(Global::getTPS());
         double timeWarp = std::min(static_cast<double>(pl->m_gameState.m_timeWarp), 1.0);
-        timestep *= timeWarp;
+        double timestep = physicsDt * timeWarp;
         if (timestep <= 0.0)
-            timestep = 1.0 / static_cast<double>(Global::getTPS());
+            timestep = physicsDt;
 
         if (g.frameStepper) {
             if (pl->m_player1 && pl->m_player1->m_isDead) {
@@ -114,6 +114,7 @@ class $modify(CCScheduler) {
             g.schedulerStepCount = 1;
             g.schedulerUpdating = false;
             PracticeFix::saveFrameStepperFrame();
+            Global::syncFrameStepperMusic();
             return;
         }
 
@@ -122,7 +123,7 @@ class $modify(CCScheduler) {
             return CCScheduler::update(dt * speedhack);
         }
 
-        g.schedulerOverflow += static_cast<double>(dt) * speedhack;
+        g.schedulerOverflow += static_cast<double>(dt) * timeWarp * speedhack;
         int steps = static_cast<int>(std::floor(g.schedulerOverflow / timestep));
 
         if (steps <= 0)
@@ -139,8 +140,39 @@ class $modify(CCScheduler) {
             g.schedulerStepCount = 1;
         };
 
+        if (g.lockDeltaFast && g.state == state::playing) {
+            int remainingSteps = steps;
+
+            while (remainingSteps > 0) {
+                int safeSteps = remainingSteps;
+                int frame = Global::getCurrentFrame();
+                if (frame < 0)
+                    frame = 0;
+
+                if (g.currentAction < g.macro.inputs.size()) {
+                    uint64_t nextFrame = g.macro.inputs[g.currentAction].frame;
+                    safeSteps = nextFrame > static_cast<uint64_t>(frame)
+                                    ? static_cast<int>(std::min<uint64_t>(
+                                          nextFrame - static_cast<uint64_t>(frame), remainingSteps))
+                                    : 0;
+                }
+
+                if (safeSteps > 0) {
+                    runUpdate(safeSteps, physicsDt * static_cast<double>(safeSteps));
+                    remainingSteps -= safeSteps;
+                    continue;
+                }
+
+                runUpdate(1, static_cast<double>(dt) * speedhack);
+                remainingSteps--;
+            }
+
+            g.schedulerUpdating = false;
+            return;
+        }
+
         for (int i = 0; i < steps; i++)
-            runUpdate(1, timestep);
+            runUpdate(1, physicsDt);
 
         g.schedulerUpdating = false;
     }

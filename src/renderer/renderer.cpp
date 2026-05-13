@@ -345,8 +345,9 @@ void Renderer::start() {
 
     std::string extension = mod->getSavedValue<std::string>("render_file_extension");
     auto timestamp = asp::time::SystemTime::now().timeSinceEpoch().millis();
+    std::string levelName = pl->m_level ? std::string(pl->m_level->m_levelName) : "unknown";
     std::string filename = fmt::format("render_{}_{}{}",
-        std::string_view(pl->m_level->m_levelName),
+        levelName,
         geode::utils::numToString(timestamp), extension);
 
 #ifdef GEODE_IS_IOS

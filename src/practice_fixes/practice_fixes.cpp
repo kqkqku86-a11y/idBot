@@ -185,6 +185,11 @@ static bool& loadingFrameStepperBackstep() {
     return loading;
 }
 
+static bool& appliedFrameStepperBackstep() {
+    static bool applied = false;
+    return applied;
+}
+
 static std::optional<PracticeCheckpointData>& frameStepperBackstepState() {
     static std::optional<PracticeCheckpointData> state;
     return state;
@@ -222,6 +227,10 @@ void PracticeFix::saveFrameStepperFrame() {
         brokenPracticeObjects()
     );
     frames.back().retainedCheckpoint.swap(checkpoint);
+
+    if (pl->m_checkpointArray && pl->m_checkpointArray->count() > 0 &&
+        pl->m_checkpointArray->lastObject() == frames.back().checkpoint)
+        pl->m_checkpointArray->removeLastObject();
 }
 
 bool PracticeFix::isLoadingFrameStepperBackstep() {
@@ -243,6 +252,7 @@ bool PracticeFix::applyFrameStepperBackstep(CheckpointObject* checkpoint) {
     if (pl->m_player2)
         pl->m_player2->m_isDead = false;
 
+    appliedFrameStepperBackstep() = true;
     return true;
 }
 
@@ -255,18 +265,26 @@ bool PracticeFix::backstepFrame(int frameCount) {
     if (frames.size() < 2)
         return false;
 
-    while (frameCount-- > 0 && frames.size() > 1)
-        frames.pop_back();
-
-    frameStepperBackstepState() = frames.back();
+    size_t targetOffset = std::min<size_t>(frameCount, frames.size() - 1);
+    PracticeCheckpointData target = frames[frames.size() - 1 - targetOffset];
     loadingFrameStepperBackstep() = true;
-    pl->m_checkpointArray->addObject(frames.back().checkpoint);
+    appliedFrameStepperBackstep() = false;
+    frameStepperBackstepState() = target;
+    pl->m_checkpointArray->addObject(target.checkpoint);
     pl->resetLevel();
     if (pl->m_checkpointArray->count() > 0 &&
-        pl->m_checkpointArray->lastObject() == frames.back().checkpoint)
+        pl->m_checkpointArray->lastObject() == target.checkpoint)
         pl->m_checkpointArray->removeLastObject();
+    bool applied = appliedFrameStepperBackstep();
     loadingFrameStepperBackstep() = false;
+    appliedFrameStepperBackstep() = false;
     frameStepperBackstepState().reset();
+
+    if (!applied)
+        return false;
+
+    while (targetOffset-- > 0 && frames.size() > 1)
+        frames.pop_back();
 
     return true;
 }
@@ -354,6 +372,13 @@ class $modify(FixPlayLayer, PlayLayer) {
         PlayLayer::removeCheckpoint(checkpoint);
         m_fields->removeCheckpoint(checkpoint);
         Global::get().checkpoints.erase(checkpoint);
+    }
+
+    void updateAttempts() {
+        if (PracticeFix::isLoadingFrameStepperBackstep())
+            return;
+
+        PlayLayer::updateAttempts();
     }
 
     void resetLevel() {

@@ -85,9 +85,7 @@ struct Macro : gdr::Replay<Macro, input> {
     void parseExtension(binary_reader& reader) override;
     void saveExtension(binary_writer& writer) const override;
 
-    std::string getBotVersionString() const {
-        return getModVersionString();
-    }
+    std::string getBotVersionString() const;
 
     LegacyMacro toLegacy() const;
 

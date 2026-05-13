@@ -219,13 +219,13 @@ int Global::getCurrentFrame(bool editor) {
     auto* pl = PlayLayer::get();
 
     if (pl && g.m_frameCount > 0) {
-        return g.m_frameCount - g.frameOffset;
+        return std::max(g.m_frameCount - g.frameOffset, 0);
     }
 
     if (!pl)
         return 0;
 
-    return g.m_frameCount - g.frameOffset;
+    return std::max(g.m_frameCount - g.frameOffset, 0);
 }
 
 class $modify(FrameCounterGJBaseGameLayer, GJBaseGameLayer) {
@@ -244,7 +244,7 @@ class $modify(FrameCounterGJBaseGameLayer, GJBaseGameLayer) {
         GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
 
         if (isPlaying && !g.schedulerFrozenUpdate)
-            g.m_frameCount += std::max(g.schedulerStepCount, 1);
+            g.m_frameCount = static_cast<int>(playLayer->m_gameState.m_currentProgress / 2);
     }
 };
 
@@ -321,12 +321,29 @@ void Global::backstepFrame() {
     if (!PlayLayer::get() || !g.frameStepper)
         return;
 
+    if (!PracticeFix::backstepFrame()) {
+        g.suppressNextFrameStep = false;
+        return;
+    }
+
     g.stepFrame = false;
-    g.suppressNextFrameStep = true;
-    PracticeFix::backstepFrame();
+    g.suppressNextFrameStep = false;
     g.stepFrameDraw = true;
     g.stepFrameDrawMultiple = 2;
     g.stepFrameParticle = 4;
+}
+
+void Global::syncFrameStepperMusic() {
+    auto* pl = PlayLayer::get();
+    if (!pl)
+        return;
+
+    double levelTime = pl->m_gameState.m_levelTime;
+    if (levelTime < 0.0)
+        levelTime = 0.0;
+
+    FMODAudioEngine::sharedEngine()->setMusicTimeMS(static_cast<unsigned int>(levelTime * 1000.0),
+                                                    true, 0);
 }
 
 void Global::toggleSpeedhack() {
@@ -354,20 +371,20 @@ void Global::toggleFrameStepper() {
     if (!g.frameStepper) {
         g.stepFrame = false;
         g.suppressNextFrameStep = false;
+        g.stepFrameDraw = false;
+        g.stepFrameDrawMultiple = 0;
         g.stepFrameParticle = false;
+        g.schedulerOverflow = 0.0;
+        g.schedulerStepCount = 1;
+        g.schedulerUpdating = false;
+        g.schedulerFrozenUpdate = false;
         PracticeFix::clearStoredFrames();
-
-        if (PlayLayer::get() && g.frameStepperMusicTime != 0) {
-            FMODAudioEngine::sharedEngine()->setMusicTimeMS(g.frameStepperMusicTime, true, 0);
-            g.frameStepperMusicTime = 0;
-        }
+        Global::syncFrameStepperMusic();
     } else {
         g.stepFrame = false;
         g.suppressNextFrameStep = false;
         PracticeFix::clearStoredFrames();
         PracticeFix::saveFrameStepperFrame();
-        if (PlayLayer::get())
-            g.frameStepperMusicTime = FMODAudioEngine::sharedEngine()->getMusicTimeMS(0);
     }
 
     if (auto rl = static_cast<RecordLayer*>(g.layer)) {
@@ -515,6 +532,7 @@ $execute {
 
     g.frameOffset = g.mod->getSettingValue<int64_t>("frame_offset");
     g.lockDelta = g.mod->getSettingValue<bool>("lock_delta");
+    g.lockDeltaFast = g.mod->getSettingValue<std::string>("lock_delta_mode") == "Fast";
     g.stopPlaying = g.mod->getSettingValue<bool>("auto_stop_playing");
 
     if (g.mod->getSettingValue<std::string>("macro_accuracy") == "Frame Fixes")

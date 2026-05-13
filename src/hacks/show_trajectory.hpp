@@ -137,7 +137,7 @@ public:
     cocos2d::ccColor4F color2;
     cocos2d::ccColor4F color3;
 
-    cocos2d::CCPoint player1Trajectory[480];
-    cocos2d::CCPoint player2Trajectory[480];
+    std::vector<cocos2d::CCPoint> player1Trajectory;
+    std::vector<cocos2d::CCPoint> player2Trajectory;
 
 };

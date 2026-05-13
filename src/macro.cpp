@@ -4,6 +4,68 @@
 
 #include <Geode/modify/PlayLayer.hpp>
 
+namespace {
+int normalizeXDVersion(int version) {
+    if (version <= 0)
+        return 0;
+
+    if (version < 100)
+        return version * 1000;
+
+    if (version < 1000) {
+        int major = version / 100;
+        int minor = (version / 10) % 10;
+        int patch = version % 10;
+
+        return major * 1000 + minor * 100 + patch;
+    }
+
+    return version;
+}
+
+int parseBotVersion(std::string version) {
+    if (!version.empty() && version.front() == 'v')
+        version.erase(version.begin());
+
+    auto suffix = version.find_first_of(" \n\r\t-+");
+    if (suffix != std::string::npos)
+        version = version.substr(0, suffix);
+
+    auto parts = geode::utils::string::split(version, ".");
+    if (parts.empty())
+        return 0;
+
+    if (parts.size() == 1)
+        return normalizeXDVersion(geode::utils::numFromString<int>(parts[0]).unwrapOr(0));
+
+    int major = geode::utils::numFromString<int>(parts[0]).unwrapOr(0);
+    int minor = parts.size() > 1 ? geode::utils::numFromString<int>(parts[1]).unwrapOr(0) : 0;
+    int patch = parts.size() > 2 ? geode::utils::numFromString<int>(parts[2]).unwrapOr(0) : 0;
+
+    return normalizeXDVersion(major * 1000 + minor * 100 + patch);
+}
+
+void normalizeMacroVersion(Macro& macro) {
+    if (macro.botInfo.name == "xdBot")
+        macro.botInfo.version = normalizeXDVersion(macro.botInfo.version);
+}
+}
+
+std::string Macro::getBotVersionString() const {
+    if (botInfo.version <= 0)
+        return "N/A";
+
+    if (botInfo.name == "xdBot") {
+        int major = botInfo.version / 1000;
+        int minor = (botInfo.version / 100) % 10;
+        int patch = botInfo.version % 100;
+
+        return fmt::format("{}.{}.{}", major, minor, patch);
+    }
+
+    return geode::utils::numToString(botInfo.version);
+}
+
 void Macro::recordAction(int frame, int button, bool player2, bool hold) {
     PlayLayer* pl = PlayLayer::get();
     if (!pl)
@@ -17,8 +79,7 @@ void Macro::recordAction(int frame, int button, bool player2, bool hold) {
     if (g.tpsEnabled)
         g.macro.framerate = g.tps;
 
-    if (Macro::flipControls())
-        player2 = !player2;
+    player2 = !player2;
 
     for (int i = (int)g.macro.inputs.size() - 1; i >= 0; i--) {
         auto& last = g.macro.inputs[i];
@@ -204,7 +265,7 @@ LegacyMacro Macro::toLegacy() const {
     legacy.coins = coins;
     legacy.ldm = ldm;
     legacy.botInfo.name = botInfo.name;
-    legacy.botInfo.version = getModVersionString();
+    legacy.botInfo.version = getBotVersionString();
     legacy.levelInfo.id = levelInfo.id;
     legacy.levelInfo.name = levelInfo.name;
 
@@ -229,13 +290,8 @@ Macro Macro::fromLegacy(const LegacyMacro& legacy) {
     macro.coins = legacy.coins;
     macro.ldm = legacy.ldm;
     macro.botInfo.name = legacy.botInfo.name;
-    std::string versionStr = legacy.botInfo.version;
-    auto firstSpace = versionStr.find_first_of(" \n\r\t");
-    if (firstSpace != std::string::npos)
-        versionStr = versionStr.substr(0, firstSpace);
-
-    float parsedVer = geode::utils::numFromString<float>(versionStr).unwrapOr(0.f);
-    macro.botInfo.version = static_cast<int>(std::round(parsedVer * 1000.f));
+    macro.botInfo.version = parseBotVersion(legacy.botInfo.version);
+    normalizeMacroVersion(macro);
     macro.isLegacy = macro.botInfo.name == "xdBot" && macro.botInfo.version < 2600;
     macro.levelInfo.id = legacy.levelInfo.id;
     macro.levelInfo.name = legacy.levelInfo.name;
@@ -315,10 +371,20 @@ Macro Macro::importData(std::vector<uint8_t>& data) {
         auto result = gdr::Replay<Macro, input>::importData(span);
         if (result.isOk()) {
             Macro macro = std::move(result).unwrap();
+            normalizeMacroVersion(macro);
             macro.xdBotMacro = macro.botInfo.name == "xdBot";
+            macro.isLegacy = macro.botInfo.name == "xdBot" && macro.botInfo.version < 2600;
             return macro;
         }
         log::warn("GDR2 import failed: {}", result.unwrapErr());
+    }
+
+    {
+        LegacyMacro legacy = LegacyMacro::importData(data);
+        if (!legacy.inputs.empty()) {
+            Macro macro = fromLegacy(legacy);
+            return macro;
+        }
     }
 
     {
@@ -326,18 +392,12 @@ Macro Macro::importData(std::vector<uint8_t>& data) {
         auto result = gdr::convert<Macro, input>(span);
         if (result.isOk()) {
             Macro macro = std::move(result).unwrap();
+            normalizeMacroVersion(macro);
             macro.xdBotMacro = macro.botInfo.name == "xdBot";
+            macro.isLegacy = macro.botInfo.name == "xdBot" && macro.botInfo.version < 2600;
             return macro;
         }
         log::warn("GDR converter import failed: {}", result.unwrapErr());
-    }
-
-    {
-        LegacyMacro legacy = LegacyMacro::importData(data);
-        if (!legacy.inputs.empty() || !legacy.botInfo.name.empty()) {
-            Macro macro = fromLegacy(legacy);
-            return macro;
-        }
     }
 
     log::error("Failed to import macro data in any format");

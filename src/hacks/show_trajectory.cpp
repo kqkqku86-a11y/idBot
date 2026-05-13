@@ -120,6 +120,7 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
     if (!t.fakePlayer1 || !t.fakePlayer2) return;
 
     auto& g = Global::get();
+    int predictionLength = std::max(t.length, 0);
 
     g.safeMode = true;
 
@@ -128,6 +129,8 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
 
     t.trajectoryNode()->setVisible(true);
     t.trajectoryNode()->clear();
+    t.player1Trajectory.assign(predictionLength, CCPointZero);
+    t.player2Trajectory.assign(predictionLength, CCPointZero);
 
     if (t.fakePlayer1 && pl->m_player1) {
         createTrajectory(pl, t.fakePlayer1, pl->m_player1, true);
@@ -154,6 +157,8 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
 }
 float rot = 0.f;
 void ShowTrajectory::createTrajectory(PlayLayer* pl, PlayerObject* fakePlayer, PlayerObject* realPlayer, bool hold, bool inverted) {
+    if (!pl || !fakePlayer || !realPlayer)
+        return;
 
     bool player2 = pl->m_player2 == realPlayer;
 
@@ -171,13 +176,14 @@ void ShowTrajectory::createTrajectory(PlayLayer* pl, PlayerObject* fakePlayer, P
     if (pl->m_effectManager)
         pl->m_effectManager->saveToState(effectState);
 
-    for (int i = 0; i < t.length; i++) {
+    int predictionLength = std::max(t.length, 0);
+    for (int i = 0; i < predictionLength; i++) {
         CCPoint prevPos = fakePlayer->getPosition();
 
         if (hold) {
-            if (player2)
+            if (player2 && i < static_cast<int>(t.player2Trajectory.size()))
                 t.player2Trajectory[i] = prevPos;
-            else
+            else if (!player2 && i < static_cast<int>(t.player1Trajectory.size()))
                 t.player1Trajectory[i] = prevPos;
         }
 
@@ -192,15 +198,25 @@ void ShowTrajectory::createTrajectory(PlayLayer* pl, PlayerObject* fakePlayer, P
                 (inverted ? !realPlayer->m_isGoingLeft : realPlayer->m_isGoingLeft) ? fakePlayer->pushButton(static_cast<PlayerButton>(2)) : fakePlayer->pushButton(static_cast<PlayerButton>(3));
         }
 
-        float physicsDt = (1.f / std::max(Global::getTPS(), 1.f)) * 60.f;
+        float physicsStep = (1.f / std::max(Global::getTPS(), 1.f)) * 60.f;
         float timeWarp = std::min(pl->m_gameState.m_timeWarp, 1.f);
         if (timeWarp <= 0.f)
             timeWarp = 1.f;
-        t.delta = physicsDt * timeWarp;
+        t.delta = physicsStep * timeWarp;
 
-        pl->m_gameState.m_totalTime += 1.0 / std::max(Global::getTPS(), 1.f);
+        double physicsSeconds = 1.0 / std::max(Global::getTPS(), 1.f);
+        pl->m_gameState.m_totalTime += physicsSeconds;
+        pl->m_gameState.m_unkDouble3 += physicsSeconds / timeWarp;
         pl->m_gameState.m_currentProgress++;
-        fakePlayer->m_totalTime += 1.0 / std::max(Global::getTPS(), 1.f);
+        pl->m_gameState.m_unkUint5 += static_cast<int>(std::round(timeWarp * 1000.f));
+        fakePlayer->m_totalTime += physicsSeconds;
+
+        float playerSpeed = *reinterpret_cast<float*>(&pl->m_gameState.m_timeModRelated);
+        if (playerSpeed != 0.f) {
+            pl->m_gameState.m_timeModRelated = 0;
+            pl->m_gameState.m_timeModRelated2 = 0;
+            fakePlayer->updateTimeMod(playerSpeed, true);
+        }
 
         fakePlayer->m_playEffects = false;
         fakePlayer->update(t.delta);
@@ -216,12 +232,15 @@ void ShowTrajectory::createTrajectory(PlayLayer* pl, PlayerObject* fakePlayer, P
         cocos2d::ccColor4F color = hold ? t.color1 : t.color2;
 
         if (!hold) {
-            if ((player2 && t.player2Trajectory[i] == prevPos) || !player2 && t.player1Trajectory[i] == prevPos)
+            bool matchesHeldPath =
+                (player2 && i < static_cast<int>(t.player2Trajectory.size()) && t.player2Trajectory[i] == prevPos) ||
+                (!player2 && i < static_cast<int>(t.player1Trajectory.size()) && t.player1Trajectory[i] == prevPos);
+            if (matchesHeldPath)
                 color = t.color3;
         }
 
-        if (i >= t.length - 40)
-            color.a = (t.length - i) / 40.f;
+        if (i >= predictionLength - 40)
+            color.a = (predictionLength - i) / 40.f;
 
         t.trajectoryNode()->drawSegment(prevPos, fakePlayer->getPosition(), 0.6f, color);
 
@@ -319,7 +338,7 @@ void ShowTrajectory::updateMergedColor() {
 }
 
 void ShowTrajectory::handlePortal(PlayerObject* player, int id) {
-    if (!portalIDs.contains(id)) return;
+    if (portalIDs.find(id) == portalIDs.end()) return;
 
     switch (id) {
     case 101:
@@ -465,7 +484,12 @@ class $modify(GJBaseGameLayer) {
                     }
                 }
 
-                if ((!objectTypes.contains(static_cast<int>(obj->m_objectType)) && !portalIDs.contains(obj->m_objectID)) || collectibleIDs.contains(obj->m_objectID)) {
+                bool isTrajectoryObject =
+                    objectTypes.find(static_cast<int>(obj->m_objectType)) != objectTypes.end() ||
+                    portalIDs.find(obj->m_objectID) != portalIDs.end();
+                bool isCollectible = collectibleIDs.find(obj->m_objectID) != collectibleIDs.end();
+
+                if (!isTrajectoryObject || isCollectible) {
                     if (obj->m_isDisabled || obj->m_isDisabled2) continue;
 
                     disabledObjects.push_back(obj);

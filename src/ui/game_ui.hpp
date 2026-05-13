@@ -1,3 +1,4 @@
+// game_ui.hpp
 
 #pragma once
 
@@ -6,17 +7,33 @@
 #include "record_layer.hpp"
 
 class Interface {
-
   public:
+    CCLabelBMFont* frameLabel = nullptr;
+    CCLabelBMFont* stateLabel = nullptr;
+
+    CCMenu* buttonMenu = nullptr;
+
+    Button* stepFrameBtn = nullptr;
+    Button* backstepFrameBtn = nullptr;
+    Button* disableStepperBtn = nullptr;
+    Button* speedhackBtn = nullptr;
+
+    static Interface& get() {
+        static Interface instance;
+        return instance;
+    }
+
     static void openButtonEditor() {
-        ButtonEditLayer *layer = ButtonEditLayer::create();
+        auto* layer = ButtonEditLayer::create();
+
         layer->m_noElasticity = true;
+
         layer->show();
     }
 
-    static void addLabels(PlayLayer *pl);
+    static void addLabels(PlayLayer* pl);
 
-    static void addButtons(PlayLayer *pl);
+    static void addButtons(PlayLayer* pl);
 
     static void updateLabels();
 

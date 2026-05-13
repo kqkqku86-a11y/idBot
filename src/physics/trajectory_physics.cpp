@@ -33,6 +33,53 @@ CCPoint pointForAngle(float angle) {
     return {std::cos(angle), std::sin(angle)};
 #endif
 }
+
+cocos2d::CCArray* getGroup(GJBaseGameLayer* layer, int groupID) {
+    if (!layer)
+        return nullptr;
+
+    groupID = std::clamp(groupID, 0, 9999);
+    cocos2d::CCArray* group = layer->m_groups.at(groupID);
+    if (!group) {
+        group = cocos2d::CCArray::create();
+        layer->m_groupDict->setObject(group, groupID);
+        layer->m_groups.at(groupID) = group;
+    }
+
+    return group;
+}
+
+float redirectPlayerForce(PlayerObject* player, float force, float, float, float) {
+    if (!player)
+        return 0.f;
+
+    CCPoint velocity = {
+        static_cast<float>(player->m_platformerXVelocity),
+        static_cast<float>(player->m_yVelocity),
+    };
+
+    float angle = force * 0.017453292f - std::atan2(velocity.y, velocity.x);
+    if (angle != 0.f) {
+        float s = std::sin(angle);
+        float c = std::cos(angle);
+        velocity = CCPoint{
+            velocity.x * s - velocity.y * c,
+            velocity.x * c + velocity.y * s,
+        };
+    }
+
+    if (player->m_isSideways)
+        std::swap(velocity.x, velocity.y);
+
+    player->m_yVelocity = velocity.y;
+    player->m_isAccelerating = true;
+    if (player->m_isPlatformer) {
+        player->m_platformerXVelocity = velocity.x;
+        player->m_affectedByForces = true;
+    }
+
+    return player->m_yVelocity;
+}
 }
 
 void flipGravity(PlayerObject* player, bool gravity) {
@@ -202,8 +249,29 @@ void stopDashing(PlayerObject* player) {
     }
     player->m_dashRing = nullptr;
 
-    if (player->m_isBall)
+    if (player->m_isPlatformer) {
+        float normal = std::sqrt(player->m_dashX * player->m_dashX + player->m_dashY * player->m_dashY);
+        if (normal <= 17.3f)
+            normal = (normal / 17.3f) * 1.5f + 0.5f;
+        else
+            normal = 2.f;
+
+        float sizeMod = player->m_vehicleSize == 1.f ? 0.433333f : 0.333333f;
+        float sidewaysMod = player->m_isSideways ? -1.f : 1.f;
+        int gravityMod = player->m_isUpsideDown ? -0xb4 : 0xb4;
+        int leftMod = player->m_isGoingLeft ? -1 : 1;
+        player->m_rotationSpeed = (gravityMod * leftMod * sidewaysMod * player->m_gravityMod * normal) / sizeMod;
+        player->m_isRotating = true;
+    }
+
+    if (player->m_isBall) {
+        if (player->m_isPlatformer) {
+            player->m_isRotating = false;
+            player->m_isBallRotating = false;
+            player->m_rotationSpeed = 0.0;
+        }
         player->runBallRotation(1.0);
+    }
 }
 
 void teleportPlayer(GJBaseGameLayer* layer, TeleportPortalObject* object, PlayerObject* player) {
@@ -212,20 +280,32 @@ void teleportPlayer(GJBaseGameLayer* layer, TeleportPortalObject* object, Player
 
     player->m_wasTeleported = true;
     CCPoint playerPos = player->getPosition();
-    CCPoint destination = playerPos;
-
+    TeleportPortalObject* destinationPortal = object->m_orangePortal;
     if (object->m_orangePortal) {
-        auto* orange = object->m_orangePortal;
+        object->m_teleportYOffset = object->m_orangePortal->getStartPos().y - object->getStartPos().y;
+    } else if (object->m_targetGroupID > 0) {
+        if (auto* group = getGroup(layer, object->m_targetGroupID); group && group->count() > 0) {
+            float pick = group->count() == 1 ? 0.f : static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
+            if (pick == 1.f)
+                pick = 0.f;
+            destinationPortal = typeinfo_cast<TeleportPortalObject*>(group->objectAtIndex(static_cast<int>(pick * group->count())));
+        }
+    }
+
+    if (destinationPortal) {
+        CCPoint destination = destinationPortal->getPosition();
+        CCPoint portalPos = object->getPosition();
+        player->m_lastPortalPos = object->getPosition();
+        player->m_lastActivatedPortal = object;
+        player->m_fallStartY = 0.f;
         if (object->m_objectID == 0x2eb) {
-            object->m_teleportYOffset = orange->getStartPos().y - object->getStartPos().y;
             destination = CCPoint{playerPos.x, object->getRealPosition().y + object->m_teleportYOffset};
-        } else {
-            destination = orange->getPosition();
         }
 
         if (object->m_saveOffset) {
-            CCPoint offset = object->getRealPosition() - playerPos;
-            destination -= offset;
+            portalPos = object->getRealPosition();
+            portalPos -= playerPos;
+            destination -= portalPos;
         }
         if (object->m_ignoreX)
             destination.x = playerPos.x;
@@ -242,6 +322,48 @@ void teleportPlayer(GJBaseGameLayer* layer, TeleportPortalObject* object, Player
         flipGravity(player, gravity);
     }
 
+    float forceAngle;
+    if (destinationPortal) {
+        float gravityForceMod = 90.f;
+        int id = object->m_objectID;
+        if (id == 0x26 || id == 0x2eb || id == 0x2ed || id == 0x810 || id == 0xb56)
+            gravityForceMod = 180.f;
+
+        forceAngle = (object->isFlipX() ? 180.f : 1.f) + (gravityForceMod - destinationPortal->getRotationX());
+    } else {
+        forceAngle = (object->isFlipX() ? 180.f : 1.f) - object->getRotationX();
+    }
+
+    if (object->m_redirectForceEnabled) {
+        redirectPlayerForce(player, forceAngle, object->m_redirectForceMod, object->m_redirectForceMin, object->m_redirectForceMax);
+    } else if (object->m_staticForceEnabled) {
+        float force = object->m_staticForce;
+        if (force == 0.f && !object->m_staticForceAdditive) {
+            player->m_isAccelerating = false;
+            player->m_yVelocity = 0.0;
+            if (player->m_isPlatformer) {
+                player->m_platformerXVelocity = 0.0;
+                player->m_affectedByForces = false;
+            }
+        } else {
+            CCPoint dir = pointForAngle(forceAngle * 0.01745329f);
+            float length = dir.getLength();
+            if (length > 0.f) {
+                CCPoint forceVector = dir * (force / length);
+                if (player->m_isSideways)
+                    std::swap(forceVector.x, forceVector.y);
+
+                player->m_isAccelerating = true;
+                player->m_yVelocity = forceVector.y + (object->m_staticForceAdditive ? player->m_yVelocity : 0.0);
+                if (player->m_isPlatformer) {
+                    player->m_platformerXVelocity =
+                        forceVector.x + (object->m_staticForceAdditive ? player->m_platformerXVelocity : 0.0);
+                    player->m_affectedByForces = true;
+                }
+            }
+        }
+    }
+
     if (object->m_snapGround)
         player->m_lastGroundedPos = player->getPosition();
 }
@@ -249,7 +371,7 @@ void teleportPlayer(GJBaseGameLayer* layer, TeleportPortalObject* object, Player
 void ringJump(PlayerObject* player, RingObject* ring) {
     if (!player || !ring || player->m_isDead)
         return;
-    if (player->m_ringRelatedSet.contains(ring->m_uniqueID))
+    if (player->m_ringRelatedSet.find(ring->m_uniqueID) != player->m_ringRelatedSet.end())
         return;
     if (!player->m_stateRingJump2 || player->m_isDashing || !player->m_stateJumpBuffered)
         return;
@@ -281,6 +403,9 @@ void ringJump(PlayerObject* player, RingObject* ring) {
     if (!custom && !teleport)
         player->m_padRingRelated = true;
 
+    if (custom)
+        return;
+
     if (teleport) {
         teleportPlayer(player->m_gameLayer, reinterpret_cast<TeleportPortalObject*>(ring), player);
         return;
@@ -310,7 +435,20 @@ void ringJump(PlayerObject* player, RingObject* ring) {
         float velocity = gravitySign(player) * -15.f;
         if (player->m_isShip || player->m_isBird || player->m_isDart || player->m_isSwing)
             velocity = gravitySign(player) * -14.f;
+        if (player->m_isBird)
+            velocity *= 0.8f;
+        else if (!player->m_isRobot && player->m_isSpider)
+            velocity *= 1.1f;
         player->setYVelocity(velocity, 1);
+        if (!player->m_isBall && !player->m_isLocked && !player->m_isDashing) {
+            player->m_isRotating = false;
+            player->m_isBallRotating2 = false;
+            player->m_isBallRotating = false;
+            player->m_rotationSpeed = 0.0;
+            player->runNormalRotation(0, 1.0);
+        } else {
+            player->runBallRotation2();
+        }
         player->m_hasEverHitRing = true;
         player->m_isAccelerating = true;
         if (player->m_isBall || player->m_isSwing)
@@ -343,6 +481,16 @@ void ringJump(PlayerObject* player, RingObject* ring) {
     player->m_lastGroundedPos = player->getPosition();
     player->m_hasEverHitRing = true;
 
+    if (!player->m_isBall && !player->m_isLocked && !player->m_isDashing) {
+        player->m_isRotating = false;
+        player->m_isBallRotating2 = false;
+        player->m_isBallRotating = false;
+        player->m_rotationSpeed = 0.0;
+        player->runNormalRotation(0, 1.0);
+    } else {
+        player->runBallRotation2();
+    }
+
     if (player->m_isSwing)
         player->m_yVelocity *= 0.6;
     else if (player->m_isBall || player->m_isSpider)
@@ -350,6 +498,8 @@ void ringJump(PlayerObject* player, RingObject* ring) {
 
     if (ring->m_objectType == GameObjectType::GravityRing)
         flipGravity(player, !player->m_isUpsideDown);
+    if (ring->m_objectType == GameObjectType::RedJumpRing)
+        player->m_isAccelerating = true;
 }
 
 void togglePlayerScale(PlayerObject* player, bool smallSize) {

@@ -351,7 +351,7 @@ class $modify(TPSBypassPLHook, PlayLayer) {
         if (timestamp > 0 && Global::get().getTPS() != 240.f) {
             // recalculate m_currentProgress based on the actual time passed
             auto progress = getActualProgress(this);
-            m_gameState.m_currentProgress = timestamp * progress / 100.f;
+            m_gameState.m_currentProgress = timestamp * progress * 2 / 100.f;
         }
         return currentProgress;
     }
@@ -373,7 +373,7 @@ class $modify(TPSBypassPLHook, PlayLayer) {
         // also we can't rely on m_level->m_timestamp, because it might not be updated yet
         auto oldTimestamp = m_gameState.m_commandIndex;
         if (Global::get().getTPS() != 240.f) {
-            auto ticks = static_cast<uint32_t>(std::round(m_gameState.m_levelTime * 240));
+            auto ticks = static_cast<uint32_t>(std::round(m_gameState.m_levelTime * 480));
             m_gameState.m_commandIndex = ticks;
         }
         PlayLayer::levelComplete();

@@ -2,6 +2,8 @@
 
 #include <Geode/loader/Mod.hpp>
 
+#include <algorithm>
+#include <cctype>
 #include <vector>
 
 #include <matjson.hpp>
@@ -14,7 +16,9 @@ inline std::string getModVersionString() {
 }
 
 inline int getModVersionInt() {
-    return static_cast<int>(geode::Mod::get()->getVersion().getMajor());
+    auto version = geode::Mod::get()->getVersion();
+    return static_cast<int>(version.getMajor() * 1000 + version.getMinor() * 100 +
+                            version.getPatch());
 }
 
 geode::prelude::VersionInfo getVersion(std::vector<std::string> nums);
@@ -130,11 +134,24 @@ template <typename S = void, typename T = Input> class Replay {
                            bool importInputs = true) {
         Self replay;
 
-        auto parseResult =
-            matjson::msgpack::parse(std::span<const uint8_t>(data));
+        auto firstNonWhitespace = std::find_if(
+            data.begin(),
+            data.end(),
+            [](uint8_t c) {
+                return !std::isspace(static_cast<unsigned char>(c));
+            });
+        bool isJson = firstNonWhitespace != data.end() &&
+                      (*firstNonWhitespace == '{' || *firstNonWhitespace == '[');
+
+        auto parseResult = isJson
+                               ? matjson::parse(std::string_view(
+                                     reinterpret_cast<const char *>(data.data()), data.size()))
+                               : matjson::msgpack::parse(std::span<const uint8_t>(data));
         if (!parseResult) {
-            parseResult = matjson::parse(std::string_view(
-                reinterpret_cast<const char *>(data.data()), data.size()));
+            parseResult =
+                isJson ? matjson::msgpack::parse(std::span<const uint8_t>(data))
+                       : matjson::parse(std::string_view(
+                             reinterpret_cast<const char *>(data.data()), data.size()));
             if (!parseResult)
                 return replay;
         }

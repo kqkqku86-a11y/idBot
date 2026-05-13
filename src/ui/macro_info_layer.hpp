@@ -203,7 +203,7 @@ class MacroInfoLayer : public geode::Popup {
         m_mainLayer->addChild(lbl);
 
         lbl = CCLabelBMFont::create(
-            (g.macro.botInfo.name + " " + getModVersionString()).c_str(),
+            (g.macro.botInfo.name + " " + g.macro.getBotVersionString()).c_str(),
             "chatFont.fnt");
         lbl->setAnchorPoint({0, 0.5});
         lbl->limitLabelWidth(271.f, 0.475, 0.01f);
