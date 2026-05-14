@@ -11,4 +11,8 @@ void stopDashing(PlayerObject* player);
 void ringJump(PlayerObject* player, RingObject* ring);
 void togglePlayerScale(PlayerObject* player, bool smallSize);
 void teleportPlayer(GJBaseGameLayer* layer, TeleportPortalObject* object, PlayerObject* player);
+bool activatePortal(GJBaseGameLayer* layer, PlayerObject* player, EffectGameObject* portal);
+void triggerObject(EffectGameObject* object, GJBaseGameLayer* layer, PlayerObject* player);
+void checkSpawnObjects(GJBaseGameLayer* layer, PlayerObject* player);
+void collisionCheckObjects(GJBaseGameLayer* layer, PlayerObject* player, gd::vector<GameObject*>* objects, int objectCount, float dt);
 }

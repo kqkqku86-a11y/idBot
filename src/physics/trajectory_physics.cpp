@@ -10,16 +10,58 @@ float gravitySign(PlayerObject* player) {
     return player && player->m_isUpsideDown ? -1.f : 1.f;
 }
 
+void activateForTrajectory(EffectGameObject* object, PlayerObject* player) {
+    ShowTrajectory::snapshotObject(object);
+    ShowTrajectory::rememberActivated(player, object);
+}
+
+void bumpPlayerFromLayer(GJBaseGameLayer* layer, PlayerObject* player, EffectGameObject* object) {
+    if (!layer || !player || !object)
+        return;
+    if (!layer->canBeActivatedByPlayer(player, object))
+        return;
+
+    player->m_lastPortalPos = object->getPosition();
+    activateForTrajectory(object, player);
+
+    float force = 1.f;
+    if (object->m_objectType == GameObjectType::PinkJumpPad) {
+        if (player->m_isShip)
+            force = 0.35f;
+        else if (player->m_isBird)
+            force = 0.4f;
+        else if (player->m_isBall || player->m_isSpider)
+            force = 0.7f;
+        else
+            force = 0.65f;
+    } else if (object->m_objectType == GameObjectType::RedJumpPad) {
+        if (player->m_isShip)
+            force = player->m_vehicleSize >= 1.f ? 0.63f : 0.95f;
+        else if (player->m_isBird)
+            force = player->m_vehicleSize >= 1.f ? 0.6f : 0.98f;
+        else
+            force = 1.25f;
+    }
+
+    player->m_lastActivatedPortal = object;
+    bumpPlayer(player, force, static_cast<int>(object->m_objectType), false, object);
+}
+
 void clearCollisionState(PlayerObject* player) {
     if (!player)
         return;
 
     player->m_collidedBottomMaxY = 0.0;
     player->m_collidedTopMinY = 0.0;
+    player->m_collidedLeftMaxX = 0.0;
+    player->m_collidedRightMinX = 0.0;
+    player->m_unkA29 = false;
     player->m_collisionLogTop->removeAllObjects();
     player->m_collisionLogBottom->removeAllObjects();
     player->m_collisionLogLeft->removeAllObjects();
     player->m_collisionLogRight->removeAllObjects();
+    player->m_unk50C = -1;
+    player->m_unk510 = -1;
     player->m_lastCollisionBottom = -1;
     player->m_lastCollisionTop = -1;
     player->m_lastCollisionLeft = -1;
@@ -86,23 +128,48 @@ void flipGravity(PlayerObject* player, bool gravity) {
     if (!player || player->m_isUpsideDown == gravity)
         return;
 
-    player->m_isUpsideDown = gravity;
-    player->m_lastFlipTime = player->m_totalTime;
-    player->m_unkA29 = false;
-    if (player->m_wasOnSlope || player->m_isOnSlope)
-        player->m_slopeFlipGravityRelated = !player->m_slopeFlipGravityRelated;
+    auto flipSingle = [](PlayerObject* target, bool targetGravity) {
+        target->m_isUpsideDown = targetGravity;
+        target->m_lastFlipTime = target->m_totalTime;
+        if (target->m_wasOnSlope || target->m_isOnSlope)
+            target->m_slopeFlipGravityRelated = !target->m_slopeFlipGravityRelated;
 
-    clearCollisionState(player);
-    player->m_yVelocity *= 0.5;
-    player->m_isOnGround = false;
+        clearCollisionState(target);
+        target->m_yVelocity *= 0.5;
+        target->m_isOnGround = false;
 
-    if (player->m_isBall) {
-        player->m_isRotating = false;
-        player->m_isBallRotating = false;
-        player->m_isBallRotating2 = false;
-        player->m_rotationSpeed = 0.0;
-        player->runBallRotation2();
+        if (target->m_isBall) {
+            target->m_isRotating = false;
+            target->m_isBallRotating = false;
+            target->m_isBallRotating2 = false;
+            target->m_rotationSpeed = 0.0;
+            target->runBallRotation2();
+        }
+    };
+
+    flipSingle(player, gravity);
+
+    auto* layer = GJBaseGameLayer::get();
+    auto& trajectory = ShowTrajectory::get();
+    if (!layer || !ShowTrajectory::isFakePlayer(player) || layer->m_gameState.m_unkBool31 ||
+        !layer->m_gameState.m_isDualMode || layer->m_levelSettings->m_twoPlayerMode) {
+        return;
     }
+
+    PlayerObject* other = player == trajectory.fakePlayer1 ? trajectory.fakePlayer2 : trajectory.fakePlayer1;
+    if (!other)
+        return;
+
+    if (!(player->m_isShip == other->m_isShip &&
+          player->m_isBall == other->m_isBall &&
+          player->m_isBird == other->m_isBird &&
+          player->m_isSpider == other->m_isSpider &&
+          player->m_isRobot == other->m_isRobot &&
+          player->m_isSwing == other->m_isSwing)) {
+        return;
+    }
+
+    flipSingle(other, !gravity);
 }
 
 void propellPlayer(PlayerObject* player, float force, bool, int) {
@@ -368,6 +435,435 @@ void teleportPlayer(GJBaseGameLayer* layer, TeleportPortalObject* object, Player
         player->m_lastGroundedPos = player->getPosition();
 }
 
+bool activatePortal(GJBaseGameLayer* layer, PlayerObject* player, EffectGameObject* portal) {
+    if (!layer || !player || !portal)
+        return false;
+    if (!layer->canBeActivatedByPlayer(player, portal))
+        return false;
+    if (ShowTrajectory::hasActivated(player, portal))
+        return false;
+
+    layer->playerWillSwitchMode(player, portal);
+
+    bool isSameMode =
+        (portal->m_objectType == GameObjectType::ShipPortal && player->m_isShip) ||
+        (portal->m_objectType == GameObjectType::BallPortal && player->m_isBall) ||
+        (portal->m_objectType == GameObjectType::UfoPortal && player->m_isBird) ||
+        (portal->m_objectType == GameObjectType::WavePortal && player->m_isDart) ||
+        (portal->m_objectType == GameObjectType::SpiderPortal && player->m_isSpider) ||
+        (portal->m_objectType == GameObjectType::SwingPortal && player->m_isSwing) ||
+        (portal->m_objectType == GameObjectType::RobotPortal && player->m_isRobot) ||
+        (portal->m_objectType == GameObjectType::CubePortal &&
+            !(player->m_isShip || player->m_isBall || player->m_isBird ||
+              player->m_isDart || player->m_isSpider || player->m_isSwing ||
+              player->m_isRobot));
+
+    CCPoint position = player->getPosition();
+    player->switchedToMode(portal->m_objectType);
+
+    switch (portal->m_objectType) {
+    case GameObjectType::ShipPortal:
+        player->toggleFlyMode(true, true);
+        break;
+    case GameObjectType::BallPortal:
+        player->toggleRollMode(true, true);
+        break;
+    case GameObjectType::UfoPortal:
+        player->toggleBirdMode(true, true);
+        break;
+    case GameObjectType::WavePortal:
+        player->toggleDartMode(true, true);
+        break;
+    case GameObjectType::SpiderPortal:
+        player->toggleSpiderMode(true, true);
+        break;
+    case GameObjectType::SwingPortal:
+        player->toggleSwingMode(true, true);
+        break;
+    case GameObjectType::RobotPortal:
+        player->toggleRobotMode(true, true);
+        break;
+    default:
+        break;
+    }
+
+    player->setPosition(position);
+    if (player->m_iconSprite)
+        player->m_iconSprite->setPosition(position);
+    if (player->m_vehicleSprite)
+        player->m_vehicleSprite->setPosition(position);
+
+    player->m_lastPortalPos = portal->getPosition();
+    player->m_lastActivatedPortal = portal;
+    ShowTrajectory::snapshotObject(portal);
+    ShowTrajectory::rememberActivated(player, portal);
+
+    return !isSameMode;
+}
+
+void triggerObject(EffectGameObject* object, GJBaseGameLayer* layer, PlayerObject* player) {
+    if (!object || !layer || !player)
+        return;
+
+    ShowTrajectory::snapshotObject(object);
+    ShowTrajectory::rememberActivated(player, object);
+
+    switch (object->m_objectID) {
+    case 200:
+        layer->m_gameState.m_timeModRelated = 0.7f;
+        break;
+    case 201:
+        layer->m_gameState.m_timeModRelated = 0.9f;
+        break;
+    case 202:
+        layer->m_gameState.m_timeModRelated = 1.1f;
+        break;
+    case 203:
+        layer->m_gameState.m_timeModRelated = 1.3f;
+        break;
+    case 1334:
+        layer->m_gameState.m_timeModRelated = 1.6f;
+        break;
+    case 2066: {
+        if (object->m_followCPP)
+            break;
+
+        bool isP2 = player == ShowTrajectory::get().fakePlayer2;
+        if ((!object->m_targetPlayer2 && !isP2) || (object->m_targetPlayer2 && isP2))
+            player->m_gravityMod = object->m_gravityValue;
+        break;
+    }
+    case 2900: {
+        auto* rotate = typeinfo_cast<RotateGameplayGameObject*>(object);
+        if (!rotate)
+            break;
+
+        player->rotateGameplay(
+            rotate->m_moveDirection,
+            rotate->m_groundDirection,
+            rotate->m_editVelocity,
+            rotate->m_velocityModX,
+            rotate->m_velocityModY,
+            rotate->m_overrideVelocity,
+            rotate->m_dontSlide
+        );
+        break;
+    }
+    case 3022:
+        if (auto* teleport = typeinfo_cast<TeleportPortalObject*>(object))
+            teleportPlayer(layer, teleport, player);
+        break;
+    default:
+        break;
+    }
+}
+
+void checkSpawnObjects(GJBaseGameLayer* layer, PlayerObject* player) {
+    if (!layer || !player || !layer->m_spawnObjects)
+        return;
+
+    auto* objects = typeinfo_cast<cocos2d::CCArray*>(
+        layer->m_spawnObjects->objectForKey(layer->m_gameState.m_currentChannel)
+    );
+    if (!objects)
+        return;
+
+    int startingIndex = layer->m_gameState.m_spawnChannelRelated0[layer->m_gameState.m_currentChannel];
+    bool goingBack = layer->m_gameState.m_spawnChannelRelated1[layer->m_gameState.m_currentChannel];
+    CCPoint position = player->getPosition();
+
+    unsigned int count = objects->count();
+    for (int i = startingIndex; static_cast<unsigned int>(i) < count; i++) {
+        auto* object = typeinfo_cast<SpawnTriggerGameObject*>(objects->objectAtIndex(i));
+        if (!object)
+            continue;
+
+        if (object->m_objectID != 2066 && object->m_objectID != 2900 &&
+            object->m_objectID != 3022 && object->m_objectID != 901) {
+            continue;
+        }
+
+        CCPoint objectPos = object->m_speedStart;
+        if (player->m_isSideways) {
+            if (goingBack) {
+                if (objectPos.y < position.y)
+                    break;
+            } else if (objectPos.y > position.y) {
+                break;
+            }
+        } else {
+            if (goingBack) {
+                if (objectPos.x < position.x)
+                    break;
+            } else if (objectPos.x > position.x) {
+                break;
+            }
+        }
+
+        if (object->m_isGroupDisabled ||
+            ShowTrajectory::hasActivated(player, object) ||
+            ShowTrajectory::realPlayerHasActivated(player, object)) {
+            continue;
+        }
+
+        if (!object->m_isTouchTriggered)
+            triggerObject(object, layer, player);
+    }
+}
+
+void collisionCheckObjects(GJBaseGameLayer* layer, PlayerObject* player, gd::vector<GameObject*>* objects, int objectCount, float dt) {
+    if (!layer || !player || !objects || objectCount <= 0)
+        return;
+
+    CCRect playerRect = player->getObjectRect();
+    OBB2D* playerBox = nullptr;
+    bool playerBoxValid = false;
+
+    auto refreshPlayerRect = [&] {
+        playerRect = player->getObjectRect();
+        playerBoxValid = false;
+    };
+
+    auto getPlayerBox = [&]() -> OBB2D* {
+        if (!playerBoxValid) {
+            player->updateOrientedBox();
+            playerBox = player->getOrientedBox();
+            playerBoxValid = true;
+        }
+        return playerBox;
+    };
+
+    int checkedObjects = std::min(objectCount, static_cast<int>(objects->size()));
+    for (int i = 0; i < checkedObjects; i++) {
+        GameObject* object = objects->at(i);
+        if (!object)
+            continue;
+
+        if (object->m_objectType == GameObjectType::Decoration ||
+            object->m_objectType == GameObjectType::CollisionObject ||
+            object->m_objectType == GameObjectType::SecretCoin ||
+            object->m_objectType == GameObjectType::UserCoin ||
+            object->m_objectType == GameObjectType::Collectible ||
+            object->m_objectType == GameObjectType::EnterEffectObject ||
+            object->m_objectID == 286 || object->m_objectID == 287 ||
+            object->m_isGroupDisabled || object->m_isDisabled) {
+            continue;
+        }
+
+        if (object->m_objectType == GameObjectType::Solid ||
+            object->m_objectType == GameObjectType::Breakable) {
+            if (layer->m_solidCollisionObjectsCount < layer->m_solidCollisionObjectsIndex) {
+                layer->m_solidCollisionObjects.at(layer->m_solidCollisionObjectsCount) = object;
+            } else {
+                layer->m_solidCollisionObjects.push_back(object);
+                layer->m_solidCollisionObjectsIndex++;
+            }
+            layer->m_solidCollisionObjectsCount++;
+            continue;
+        }
+
+        if (object == layer->m_anticheatSpike)
+            continue;
+
+        if (object->m_objectType == GameObjectType::Hazard ||
+            object->m_objectType == GameObjectType::AnimatedHazard) {
+            if (layer->m_hazardCollisionObjectsCount < layer->m_hazardCollisionObjectsIndex) {
+                layer->m_hazardCollisionObjects.at(layer->m_hazardCollisionObjectsCount) = object;
+            } else {
+                layer->m_hazardCollisionObjects.push_back(object);
+                layer->m_hazardCollisionObjectsIndex++;
+            }
+            layer->m_hazardCollisionObjectsCount++;
+            continue;
+        }
+
+        CCRect objectRect = object->m_objectType == GameObjectType::Slope
+            ? object->getObjectRect(2.0, 2.0)
+            : object->getObjectRect();
+
+        if (object->m_objectRadius <= 0.f) {
+            if (!playerRect.intersectsRect(objectRect))
+                continue;
+        } else if (!layer->playerCircleCollision(player, object)) {
+            continue;
+        }
+
+        bool overlaps = true;
+        if (object->m_shouldUseOuterOb &&
+            (!layer->m_levelSettings->m_fixRadiusCollision || object->m_objectRadius <= 0.f)) {
+            OBB2D* box = object->getOrientedBox();
+            OBB2D* boxPlayer = getPlayerBox();
+            overlaps = box && boxPlayer && box->overlaps1Way(boxPlayer);
+        }
+        if (!overlaps)
+            continue;
+
+        if (object->m_objectType == GameObjectType::Slope) {
+            if (!player->m_isSideways) {
+                player->collidedWithSlopeInternal(dt, object, false);
+            } else {
+                CCRect emptyRect{0.f, 0.f, 0.f, 0.f};
+                player->handleRotatedCollisionInternal(dt, object, emptyRect, false, false, true);
+            }
+            refreshPlayerRect();
+            continue;
+        }
+
+        auto* effect = typeinfo_cast<EffectGameObject*>(object);
+        if (!effect)
+            continue;
+
+        if (ShowTrajectory::hasActivated(player, effect) ||
+            ShowTrajectory::realPlayerHasActivated(player, effect)) {
+            continue;
+        }
+
+        switch (object->m_objectType) {
+        case GameObjectType::InverseGravityPortal:
+            player->m_lastPortalPos = object->getPosition();
+            player->m_lastActivatedPortal = object;
+            activateForTrajectory(effect, player);
+            flipGravity(player, true);
+            refreshPlayerRect();
+            break;
+        case GameObjectType::NormalGravityPortal:
+            player->m_lastPortalPos = object->getPosition();
+            player->m_lastActivatedPortal = object;
+            activateForTrajectory(effect, player);
+            flipGravity(player, false);
+            refreshPlayerRect();
+            break;
+        case GameObjectType::GravityTogglePortal:
+            player->m_lastPortalPos = object->getPosition();
+            player->m_lastActivatedPortal = object;
+            activateForTrajectory(effect, player);
+            flipGravity(player, !player->m_isUpsideDown);
+            refreshPlayerRect();
+            break;
+        case GameObjectType::TeleportPortal:
+            if (layer->canBeActivatedByPlayer(player, effect)) {
+                teleportPlayer(layer, typeinfo_cast<TeleportPortalObject*>(object), player);
+                activateForTrajectory(effect, player);
+                refreshPlayerRect();
+            }
+            break;
+        case GameObjectType::CustomRing:
+        case GameObjectType::DashRing:
+        case GameObjectType::DropRing:
+        case GameObjectType::GravityDashRing:
+        case GameObjectType::GravityRing:
+        case GameObjectType::GreenRing:
+        case GameObjectType::PinkJumpRing:
+        case GameObjectType::RedJumpRing:
+        case GameObjectType::SpiderOrb:
+        case GameObjectType::YellowJumpRing:
+        case GameObjectType::TeleportOrb: {
+            auto* ring = typeinfo_cast<RingObject*>(object);
+            if (!ring)
+                break;
+            if (!player->m_touchingRings->containsObject(object))
+                player->m_touchingRings->addObject(object);
+            player->m_touchedRings.insert(object->m_uniqueID);
+            if (!player->m_isShip && !player->m_isBird && !player->m_isDart &&
+                !player->m_isSwing && !ring->m_isSpawnOnly) {
+                ringJump(player, ring);
+                activateForTrajectory(effect, player);
+            }
+            break;
+        }
+        case GameObjectType::YellowJumpPad:
+        case GameObjectType::PinkJumpPad:
+        case GameObjectType::RedJumpPad:
+        case GameObjectType::SpiderPad:
+            bumpPlayerFromLayer(layer, player, effect);
+            refreshPlayerRect();
+            break;
+        case GameObjectType::GravityPad: {
+            bool facingDown = player->m_isSideways ? object->isFacingLeft() : object->isFacingDown();
+            if (player->m_isUpsideDown == facingDown && layer->canBeActivatedByPlayer(player, effect)) {
+                if (effect->m_isReverse)
+                    player->reversePlayer(effect);
+                player->m_lastPortalPos = object->getPosition();
+                player->m_lastActivatedPortal = object;
+                activateForTrajectory(effect, player);
+                propellPlayer(player, 0.8f, false, static_cast<int>(GameObjectType::GravityPad));
+                flipGravity(player, !facingDown);
+                player->m_padRingRelated = true;
+                refreshPlayerRect();
+            }
+            break;
+        }
+        case GameObjectType::MiniSizePortal:
+            if (layer->canBeActivatedByPlayer(player, effect)) {
+                player->m_lastPortalPos = object->getPosition();
+                player->m_lastActivatedPortal = object;
+                activateForTrajectory(effect, player);
+                togglePlayerScale(player, true);
+                refreshPlayerRect();
+            }
+            break;
+        case GameObjectType::RegularSizePortal:
+            if (layer->canBeActivatedByPlayer(player, effect)) {
+                player->m_lastPortalPos = object->getPosition();
+                player->m_lastActivatedPortal = object;
+                activateForTrajectory(effect, player);
+                togglePlayerScale(player, false);
+                refreshPlayerRect();
+            }
+            break;
+        case GameObjectType::CubePortal:
+        case GameObjectType::ShipPortal:
+        case GameObjectType::BallPortal:
+        case GameObjectType::UfoPortal:
+        case GameObjectType::WavePortal:
+        case GameObjectType::SpiderPortal:
+        case GameObjectType::SwingPortal:
+        case GameObjectType::RobotPortal:
+            activatePortal(layer, player, effect);
+            refreshPlayerRect();
+            break;
+        case GameObjectType::Special:
+            if (object->m_objectID == 0x743)
+                player->m_stateHitHead = 2;
+            else if (object->m_objectID == 0x6db)
+                player->m_stateDartSlide = 2;
+            else if (object->m_objectID == 0x715)
+                player->m_stateNoAutoJump = 2;
+            else if (object->m_objectID == 0x725 && player->m_isDashing) {
+                stopDashing(player);
+                player->m_jumpBuffered = false;
+            } else if (object->m_objectID == 0xb32)
+                player->m_stateFlipGravity = 2;
+            else if (object->m_objectID == 2069 || object->m_objectID == 3645) {
+                player->m_stateForce = 2;
+                auto* forceBlock = typeinfo_cast<ForceBlockGameObject*>(object);
+                if (!forceBlock)
+                    break;
+
+                int forceID = forceBlock->m_forceID;
+                if (forceID > 0) {
+                    if (player->m_jumpPadRelated.contains(forceID) &&
+                        player->m_jumpPadRelated.at(forceID)) {
+                        break;
+                    }
+                    player->m_jumpPadRelated.insert({forceID, true});
+                }
+
+                player->m_stateForceVector += forceBlock->calculateForceToTarget(player);
+            }
+            break;
+        case GameObjectType::EnterEffectObject:
+        case GameObjectType::Modifier:
+            effect->activatedByPlayer(player);
+            if (effect->m_isTouchTriggered)
+                triggerObject(effect, layer, player);
+            break;
+        default:
+            break;
+        }
+    }
+}
+
 void ringJump(PlayerObject* player, RingObject* ring) {
     if (!player || !ring || player->m_isDead)
         return;
@@ -407,7 +903,8 @@ void ringJump(PlayerObject* player, RingObject* ring) {
         return;
 
     if (teleport) {
-        teleportPlayer(player->m_gameLayer, reinterpret_cast<TeleportPortalObject*>(ring), player);
+        if (auto* teleportPortal = typeinfo_cast<TeleportPortalObject*>(ring))
+            teleportPlayer(player->m_gameLayer, teleportPortal, player);
         return;
     }
 
@@ -420,13 +917,15 @@ void ringJump(PlayerObject* player, RingObject* ring) {
     }
 
     if (ring->m_objectType == GameObjectType::DashRing) {
-        startDashing(player, reinterpret_cast<DashRingObject*>(ring));
+        if (auto* dashRing = typeinfo_cast<DashRingObject*>(ring))
+            startDashing(player, dashRing);
         return;
     }
 
     if (ring->m_objectType == GameObjectType::GravityDashRing) {
         flipGravity(player, !player->m_isUpsideDown);
-        startDashing(player, reinterpret_cast<DashRingObject*>(ring));
+        if (auto* dashRing = typeinfo_cast<DashRingObject*>(ring))
+            startDashing(player, dashRing);
         return;
     }
 

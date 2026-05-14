@@ -37,10 +37,11 @@ bool ShowTrajectory::hasActivated(PlayerObject* player, EnhancedGameObject* obje
     if (!player || !object || object->m_isMultiActivate)
         return false;
 
+    auto key = reinterpret_cast<uintptr_t>(object);
     if (player == t.fakePlayer1)
-        return t.activatedObjectsP1[reinterpret_cast<uintptr_t>(object)];
+        return t.activatedObjectsP1.contains(key);
     if (player == t.fakePlayer2)
-        return t.activatedObjectsP2[reinterpret_cast<uintptr_t>(object)];
+        return t.activatedObjectsP2.contains(key);
 
     return false;
 }
@@ -59,6 +60,12 @@ bool ShowTrajectory::realPlayerHasActivated(PlayerObject* player, EnhancedGameOb
     if (!realPlayer)
         return false;
 
+    bool platformerActivated = !realPlayer->m_isPlatformer
+        ? object->m_isMultiActivate
+        : object->m_isNoMultiActivate;
+    if (platformerActivated)
+        return false;
+
     if (!realPlayer->m_isSecondPlayer)
         return object->m_activatedByPlayer1;
 
@@ -70,19 +77,19 @@ void ShowTrajectory::rememberActivated(PlayerObject* player, EnhancedGameObject*
         return;
 
     if (player == t.fakePlayer1)
-        t.activatedObjectsP1[reinterpret_cast<uintptr_t>(object)] = true;
+        t.activatedObjectsP1.insert({reinterpret_cast<uintptr_t>(object), true});
     else if (player == t.fakePlayer2)
-        t.activatedObjectsP2[reinterpret_cast<uintptr_t>(object)] = true;
+        t.activatedObjectsP2.insert({reinterpret_cast<uintptr_t>(object), true});
 }
 
 void ShowTrajectory::snapshotObject(EffectGameObject* object) {
     if (!object)
         return;
 
-    for (auto const& snapshot : t.objSnapshot) {
-        if (snapshot.obj == object)
-            return;
-    }
+    auto key = reinterpret_cast<uintptr_t>(object);
+    if (t.snapshotObjects.contains(key))
+        return;
+    t.snapshotObjects.insert(key);
 
     auto* ring = typeinfo_cast<RingObject*>(object);
     t.objSnapshot.push_back({
@@ -114,13 +121,60 @@ void ShowTrajectory::restoreSnapshots() {
     }
 
     t.objSnapshot.clear();
+    t.snapshotObjects.clear();
+}
+
+void ShowTrajectory::hideFakePlayer(PlayerObject* player) {
+    if (!player)
+        return;
+
+    player->setVisible(false);
+    player->setOpacity(0);
+    player->m_playEffects = false;
+    player->m_maybeReducedEffects = true;
+    if (player->getParent())
+        player->removeFromParentAndCleanup(false);
+}
+
+void ShowTrajectory::releaseFakePlayers() {
+    auto releasePlayer = [](PlayerObject*& player) {
+        if (!player)
+            return;
+
+        hideFakePlayer(player);
+        player->release();
+        player = nullptr;
+    };
+
+    releasePlayer(t.fakePlayer1);
+    releasePlayer(t.fakePlayer2);
+}
+
+PlayerObject* ShowTrajectory::ensureFakePlayer(PlayLayer* pl, bool player1) {
+    if (!pl)
+        return nullptr;
+
+    PlayerObject*& fake = player1 ? t.fakePlayer1 : t.fakePlayer2;
+    if (!fake) {
+        fake = PlayerObject::create(1, 1, pl, pl, true);
+        if (!fake)
+            return nullptr;
+
+        fake->retain();
+        fake->setPosition({ 0, 105 });
+        fake->setID(player1 ? "xdbot-trajectory-fake-player1" : "xdbot-trajectory-fake-player2");
+    }
+
+    hideFakePlayer(fake);
+    return fake;
 }
 
 void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
-    if (!t.fakePlayer1 || !t.fakePlayer2) return;
+    if (!pl || !pl->m_player1)
+        return;
 
     auto& g = Global::get();
-    int predictionLength = std::max(t.length, 0);
+    bool platformerBothSides = g.trajectoryBothSides;
 
     g.safeMode = true;
 
@@ -129,135 +183,239 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
 
     t.trajectoryNode()->setVisible(true);
     t.trajectoryNode()->clear();
-    t.player1Trajectory.assign(predictionLength, CCPointZero);
-    t.player2Trajectory.assign(predictionLength, CCPointZero);
 
-    if (t.fakePlayer1 && pl->m_player1) {
-        createTrajectory(pl, t.fakePlayer1, pl->m_player1, true);
-        createTrajectory(pl, t.fakePlayer2, pl->m_player1, false);
+    auto baseGameState = pl->m_gameState;
+    EffectManagerState baseEffectState;
+    EffectManagerState* baseEffectStatePtr = nullptr;
+    if (pl->m_effectManager) {
+        pl->m_effectManager->saveToState(baseEffectState);
+        baseEffectStatePtr = &baseEffectState;
+    }
 
-        if (g.trajectoryBothSides) {
-            createTrajectory(pl, t.fakePlayer1, pl->m_player1, true, true);
-            createTrajectory(pl, t.fakePlayer2, pl->m_player1, false, true);
+    if (ensureFakePlayer(pl, true)) {
+        bool simulateBoth = pl->m_gameState.m_isDualMode && !pl->m_levelSettings->m_twoPlayerMode;
+        if (simulateBoth && pl->m_player2)
+            ensureFakePlayer(pl, false);
+
+        createTrajectory(pl, true, Hold, simulateBoth, baseGameState, baseEffectStatePtr);
+        createTrajectory(pl, true, Swift, simulateBoth, baseGameState, baseEffectStatePtr);
+        createTrajectory(pl, true, Release, simulateBoth, baseGameState, baseEffectStatePtr);
+
+        if (pl->m_levelSettings->m_platformerMode && platformerBothSides) {
+            createTrajectory(pl, true, Hold | Left, simulateBoth, baseGameState, baseEffectStatePtr);
+            createTrajectory(pl, true, Swift | Left, simulateBoth, baseGameState, baseEffectStatePtr);
+            createTrajectory(pl, true, Release | Left, simulateBoth, baseGameState, baseEffectStatePtr);
+            createTrajectory(pl, true, Hold | Right, simulateBoth, baseGameState, baseEffectStatePtr);
+            createTrajectory(pl, true, Swift | Right, simulateBoth, baseGameState, baseEffectStatePtr);
+            createTrajectory(pl, true, Release | Right, simulateBoth, baseGameState, baseEffectStatePtr);
         }
     }
 
-    if (pl->m_gameState.m_isDualMode && pl->m_player2) {
-        createTrajectory(pl, t.fakePlayer2, pl->m_player2, true);
-        createTrajectory(pl, t.fakePlayer1, pl->m_player2, false);
+    if (pl->m_player2 && pl->m_gameState.m_isDualMode && pl->m_levelSettings->m_twoPlayerMode) {
+        if (ensureFakePlayer(pl, false)) {
+            createTrajectory(pl, false, Hold, false, baseGameState, baseEffectStatePtr);
+            createTrajectory(pl, false, Swift, false, baseGameState, baseEffectStatePtr);
+            createTrajectory(pl, false, Release, false, baseGameState, baseEffectStatePtr);
 
-        if (g.trajectoryBothSides) {
-            createTrajectory(pl, t.fakePlayer2, pl->m_player2, true, true);
-            createTrajectory(pl, t.fakePlayer1, pl->m_player2, false, true);
+            if (pl->m_levelSettings->m_platformerMode && platformerBothSides) {
+                createTrajectory(pl, false, Hold | Left, false, baseGameState, baseEffectStatePtr);
+                createTrajectory(pl, false, Swift | Left, false, baseGameState, baseEffectStatePtr);
+                createTrajectory(pl, false, Release | Left, false, baseGameState, baseEffectStatePtr);
+                createTrajectory(pl, false, Hold | Right, false, baseGameState, baseEffectStatePtr);
+                createTrajectory(pl, false, Swift | Right, false, baseGameState, baseEffectStatePtr);
+                createTrajectory(pl, false, Release | Right, false, baseGameState, baseEffectStatePtr);
+            }
         }
     }
 
+    pl->m_gameState = baseGameState;
+    if (pl->m_effectManager && baseEffectStatePtr)
+        pl->m_effectManager->loadFromState(*baseEffectStatePtr);
+
+    hideFakePlayer(t.fakePlayer1);
+    hideFakePlayer(t.fakePlayer2);
     t.creatingTrajectory = false;
     g.creatingTrajectory = false;
 }
 float rot = 0.f;
-void ShowTrajectory::createTrajectory(PlayLayer* pl, PlayerObject* fakePlayer, PlayerObject* realPlayer, bool hold, bool inverted) {
-    if (!pl || !fakePlayer || !realPlayer)
+void ShowTrajectory::applyInitialInput(PlayLayer* pl, PlayerObject* player, PlayerObject* realPlayer, int mode) {
+    if (!pl || !player || !realPlayer)
         return;
 
-    bool player2 = pl->m_player2 == realPlayer;
+    switch (mode & (Hold | Swift | Release)) {
+    case Hold:
+        player->pushButton(PlayerButton::Jump);
+        break;
+    case Swift:
+        player->pushButton(PlayerButton::Jump);
+        player->releaseButton(PlayerButton::Jump);
+        break;
+    case Release:
+        player->releaseButton(PlayerButton::Jump);
+        player->m_jumpBuffered = false;
+        break;
+    default:
+        break;
+    }
+
+    if (!pl->m_levelSettings->m_platformerMode)
+        return;
+
+    switch (mode & (Left | Right)) {
+    case Left:
+        player->releaseButton(PlayerButton::Right);
+        player->pushButton(PlayerButton::Left);
+        break;
+    case Right:
+        player->releaseButton(PlayerButton::Left);
+        player->pushButton(PlayerButton::Right);
+        break;
+    default:
+        player->releaseButton(PlayerButton::Left);
+        player->releaseButton(PlayerButton::Right);
+        if (realPlayer->m_isGoingLeft)
+            player->pushButton(PlayerButton::Left);
+        break;
+    }
+}
+
+bool ShowTrajectory::iterate(PlayLayer* pl, PlayerObject* player, int mode, cocos2d::ccColor4F color) {
+    if (!pl || !player)
+        return true;
+
+    CCPoint prevPos = player->getPosition();
+
+    float tps = std::max(Global::getTPS(), 1.f);
+    double physicsSeconds = 1.0 / tps;
+    float timeWarp = std::min(pl->m_gameState.m_timeWarp, 1.f);
+    if (timeWarp <= 0.f)
+        timeWarp = 1.f;
+
+    pl->m_gameState.m_totalTime += physicsSeconds;
+    pl->m_gameState.m_unkDouble3 += physicsSeconds / timeWarp;
+    pl->m_gameState.m_currentProgress++;
+    pl->m_gameState.m_unkUint5 += static_cast<int>(std::round(timeWarp * 1000.f));
+    player->m_totalTime += physicsSeconds;
+
+    float playerSpeed = pl->m_gameState.m_timeModRelated;
+    if (playerSpeed != 0.f) {
+        pl->m_gameState.m_timeModRelated = 0;
+        pl->m_gameState.m_timeModRelated2 = 0;
+        player->updateTimeMod(playerSpeed, true);
+        timeWarp = std::min(pl->m_gameState.m_timeWarp, 1.f);
+        if (timeWarp <= 0.f)
+            timeWarp = 1.f;
+    }
+
+    player->m_collisionLogTop->removeAllObjects();
+    player->m_collisionLogBottom->removeAllObjects();
+    player->m_collisionLogLeft->removeAllObjects();
+    player->m_collisionLogRight->removeAllObjects();
+
+    bool dead = (player == t.fakePlayer1 && t.deadP1) || (player == t.fakePlayer2 && t.deadP2);
+    if (dead) {
+        drawPlayerHitbox(player, t.trajectoryNode());
+        return true;
+    }
+
+    t.delta = (1.f / tps) * 60.f * timeWarp;
+    player->m_playEffects = false;
+    player->update(t.delta);
+    player->updateRotation(t.delta);
+    player->updatePlayerScale();
+
+    if (pl->checkCollisions(player, t.delta, false) == 1) {
+        if (player == t.fakePlayer1)
+            t.deadP1 = true;
+        else if (player == t.fakePlayer2)
+            t.deadP2 = true;
+    }
+
+    xdbot::trajectory_physics::checkSpawnObjects(pl, player);
+
+    if (pl->m_effectManager)
+        pl->m_effectManager->postCollisionCheck();
+
+    t.trajectoryNode()->drawSegment(prevPos, player->getPosition(), 0.6f, color);
+
+    dead = (player == t.fakePlayer1 && t.deadP1) || (player == t.fakePlayer2 && t.deadP2);
+    if (dead) {
+        drawPlayerHitbox(player, t.trajectoryNode());
+        return true;
+    }
+
+    return false;
+}
+
+void ShowTrajectory::createTrajectory(
+    PlayLayer* pl,
+    bool player1,
+    int mode,
+    bool simulateBothPlayers,
+    GJGameState const& baseGameState,
+    EffectManagerState* baseEffectState
+) {
+    if (!pl)
+        return;
+
+    pl->m_gameState = baseGameState;
+    if (pl->m_effectManager && baseEffectState)
+        pl->m_effectManager->loadFromState(*baseEffectState);
+
+    PlayerObject* fakePlayer = player1 ? t.fakePlayer1 : t.fakePlayer2;
+    PlayerObject* realPlayer = player1 ? pl->m_player1 : pl->m_player2;
+    PlayerObject* otherFake = player1 ? t.fakePlayer2 : t.fakePlayer1;
+    PlayerObject* otherReal = player1 ? pl->m_player2 : pl->m_player1;
+    if (!fakePlayer || !realPlayer)
+        return;
 
     PlayerPracticeFixes::transfer(realPlayer, fakePlayer, true);
-    fakePlayer->m_maybeReducedEffects = true;
-    fakePlayer->setVisible(false);
+    hideFakePlayer(fakePlayer);
+
+    if (simulateBothPlayers && otherFake && otherReal) {
+        PlayerPracticeFixes::transfer(otherReal, otherFake, true);
+        hideFakePlayer(otherFake);
+    }
 
     t.cancelTrajectory = false;
+    t.deadP1 = false;
+    t.deadP2 = false;
     t.activatedObjectsP1.clear();
     t.activatedObjectsP2.clear();
     t.objSnapshot.clear();
+    t.snapshotObjects.clear();
 
-    auto gameState = pl->m_gameState;
-    EffectManagerState effectState;
-    if (pl->m_effectManager)
-        pl->m_effectManager->saveToState(effectState);
+    applyInitialInput(pl, fakePlayer, realPlayer, mode);
+    if (simulateBothPlayers && otherFake && otherReal)
+        applyInitialInput(pl, otherFake, otherReal, mode);
+
+    cocos2d::ccColor4F color = (mode & Hold) ? t.color1 : (mode & Swift) ? t.color3 : t.color2;
+    cocos2d::ccColor4F otherColor = ccc4f(1.f - color.r, 1.f - color.g, 1.f - color.b, color.a);
 
     int predictionLength = std::max(t.length, 0);
     for (int i = 0; i < predictionLength; i++) {
-        CCPoint prevPos = fakePlayer->getPosition();
-
-        if (hold) {
-            if (player2 && i < static_cast<int>(t.player2Trajectory.size()))
-                t.player2Trajectory[i] = prevPos;
-            else if (!player2 && i < static_cast<int>(t.player1Trajectory.size()))
-                t.player1Trajectory[i] = prevPos;
-        }
-
-        fakePlayer->m_collisionLogTop->removeAllObjects();
-        fakePlayer->m_collisionLogBottom->removeAllObjects();
-        fakePlayer->m_collisionLogLeft->removeAllObjects();
-        fakePlayer->m_collisionLogRight->removeAllObjects();
-
-        if (i == 0) {
-            hold ? fakePlayer->pushButton(static_cast<PlayerButton>(1)) : fakePlayer->releaseButton(static_cast<PlayerButton>(1));
-            if (pl->m_levelSettings->m_platformerMode)
-                (inverted ? !realPlayer->m_isGoingLeft : realPlayer->m_isGoingLeft) ? fakePlayer->pushButton(static_cast<PlayerButton>(2)) : fakePlayer->pushButton(static_cast<PlayerButton>(3));
-        }
-
-        float physicsStep = (1.f / std::max(Global::getTPS(), 1.f)) * 60.f;
-        float timeWarp = std::min(pl->m_gameState.m_timeWarp, 1.f);
-        if (timeWarp <= 0.f)
-            timeWarp = 1.f;
-        t.delta = physicsStep * timeWarp;
-
-        double physicsSeconds = 1.0 / std::max(Global::getTPS(), 1.f);
-        pl->m_gameState.m_totalTime += physicsSeconds;
-        pl->m_gameState.m_unkDouble3 += physicsSeconds / timeWarp;
-        pl->m_gameState.m_currentProgress++;
-        pl->m_gameState.m_unkUint5 += static_cast<int>(std::round(timeWarp * 1000.f));
-        fakePlayer->m_totalTime += physicsSeconds;
-
-        float playerSpeed = *reinterpret_cast<float*>(&pl->m_gameState.m_timeModRelated);
-        if (playerSpeed != 0.f) {
-            pl->m_gameState.m_timeModRelated = 0;
-            pl->m_gameState.m_timeModRelated2 = 0;
-            fakePlayer->updateTimeMod(playerSpeed, true);
-        }
-
-        fakePlayer->m_playEffects = false;
-        fakePlayer->update(t.delta);
-        fakePlayer->updateRotation(t.delta);
-        fakePlayer->updatePlayerScale();
-
-        if (pl->checkCollisions(fakePlayer, t.delta, false) == 1)
-            t.cancelTrajectory = true;
-
-        if (pl->m_effectManager)
-            pl->m_effectManager->postCollisionCheck();
-
-        cocos2d::ccColor4F color = hold ? t.color1 : t.color2;
-
-        if (!hold) {
-            bool matchesHeldPath =
-                (player2 && i < static_cast<int>(t.player2Trajectory.size()) && t.player2Trajectory[i] == prevPos) ||
-                (!player2 && i < static_cast<int>(t.player1Trajectory.size()) && t.player1Trajectory[i] == prevPos);
-            if (matchesHeldPath)
-                color = t.color3;
-        }
-
         if (i >= predictionLength - 40)
             color.a = (predictionLength - i) / 40.f;
 
-        t.trajectoryNode()->drawSegment(prevPos, fakePlayer->getPosition(), 0.6f, color);
+        bool stopMain = iterate(pl, fakePlayer, mode, color);
+        bool stopOther = false;
+        if (simulateBothPlayers && otherFake)
+            stopOther = iterate(pl, otherFake, mode, otherColor);
 
-        if (t.cancelTrajectory) {
-            fakePlayer->updatePlayerScale();
-            drawPlayerHitbox(fakePlayer, t.trajectoryNode());
+        if (stopMain && (!simulateBothPlayers || stopOther))
             break;
-        }
     }
 
     restoreSnapshots();
     t.activatedObjectsP1.clear();
     t.activatedObjectsP2.clear();
-    pl->m_gameState = gameState;
-    if (pl->m_effectManager)
-        pl->m_effectManager->loadFromState(effectState);
-    fakePlayer->setVisible(false);
+    t.snapshotObjects.clear();
+    pl->m_gameState = baseGameState;
+    if (pl->m_effectManager && baseEffectState)
+        pl->m_effectManager->loadFromState(*baseEffectState);
+    hideFakePlayer(fakePlayer);
+    if (simulateBothPlayers)
+        hideFakePlayer(otherFake);
 
 }
 
@@ -338,8 +496,6 @@ void ShowTrajectory::updateMergedColor() {
 }
 
 void ShowTrajectory::handlePortal(PlayerObject* player, int id) {
-    if (portalIDs.find(id) == portalIDs.end()) return;
-
     switch (id) {
     case 101:
         player->togglePlayerScale(true, true);
@@ -400,29 +556,23 @@ class $modify(PlayLayer) {
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
 
-        t.fakePlayer1 = nullptr;
-        t.fakePlayer2 = nullptr;
+        ShowTrajectory::releaseFakePlayers();
         t.cancelTrajectory = false;
         t.creatingTrajectory = false;
-
-        t.fakePlayer1 = PlayerObject::create(1, 1, this, this, true);
-        t.fakePlayer1->retain();
-        t.fakePlayer1->setPosition({ 0, 105 });
-        t.fakePlayer1->setVisible(false);
-        m_objectLayer->addChild(t.fakePlayer1);
-
-        t.fakePlayer2 = PlayerObject::create(1, 1, this, this, true);
-        t.fakePlayer2->retain();
-        t.fakePlayer2->setPosition({ 0, 105 });
-        t.fakePlayer2->setVisible(false);
-        m_objectLayer->addChild(t.fakePlayer2);
+        t.deadP1 = false;
+        t.deadP2 = false;
 
         m_objectLayer->addChild(t.trajectoryNode(), 500);
+        t.trajectoryNode()->setVisible(false);
     }
 
     void destroyPlayer(PlayerObject * player, GameObject * gameObject) {
         if (t.creatingTrajectory || (player == t.fakePlayer1 || player == t.fakePlayer2)) {
             t.deathRotation = player->getRotation();
+            if (player == t.fakePlayer1)
+                t.deadP1 = true;
+            else if (player == t.fakePlayer2)
+                t.deadP2 = true;
             t.cancelTrajectory = true;
             return;
         }
@@ -434,10 +584,11 @@ class $modify(PlayLayer) {
         if (t.trajectoryNode())
             t.trajectoryNode()->clear();
 
-        t.fakePlayer1 = nullptr;
-        t.fakePlayer2 = nullptr;
+        ShowTrajectory::releaseFakePlayers();
         t.cancelTrajectory = false;
         t.creatingTrajectory = false;
+        t.deadP1 = false;
+        t.deadP2 = false;
 
         PlayLayer::onQuit();
     }
@@ -454,10 +605,11 @@ class $modify(PauseLayer) {
         if (t.trajectoryNode())
             t.trajectoryNode()->clear();
 
-        t.fakePlayer1 = nullptr;
-        t.fakePlayer2 = nullptr;
+        ShowTrajectory::releaseFakePlayers();
         t.cancelTrajectory = false;
         t.creatingTrajectory = false;
+        t.deadP1 = false;
+        t.deadP2 = false;
 
         PauseLayer::goEdit();
     }
@@ -467,48 +619,7 @@ class $modify(GJBaseGameLayer) {
 
     void collisionCheckObjects(PlayerObject * p0, gd::vector<GameObject*>*objects, int p2, float p3) {
         if (t.creatingTrajectory && ShowTrajectory::isFakePlayer(p0)) {
-            std::vector<GameObject*> disabledObjects;
-
-            for (const auto& obj : *objects) {
-                if (!obj) continue;
-
-                if (auto* effect = typeinfo_cast<EffectGameObject*>(obj)) {
-                    if (ShowTrajectory::hasActivated(p0, effect) ||
-                        ShowTrajectory::realPlayerHasActivated(p0, effect)) {
-                        if (effect->m_isDisabled || effect->m_isDisabled2) continue;
-
-                        disabledObjects.push_back(effect);
-                        effect->m_isDisabled = true;
-                        effect->m_isDisabled2 = true;
-                        continue;
-                    }
-                }
-
-                bool isTrajectoryObject =
-                    objectTypes.find(static_cast<int>(obj->m_objectType)) != objectTypes.end() ||
-                    portalIDs.find(obj->m_objectID) != portalIDs.end();
-                bool isCollectible = collectibleIDs.find(obj->m_objectID) != collectibleIDs.end();
-
-                if (!isTrajectoryObject || isCollectible) {
-                    if (obj->m_isDisabled || obj->m_isDisabled2) continue;
-
-                    disabledObjects.push_back(obj);
-                    obj->m_isDisabled = true;
-                    obj->m_isDisabled2 = true;
-                }
-            }
-
-            GJBaseGameLayer::collisionCheckObjects(p0, objects, p2, p3);
-
-            for (const auto& obj : disabledObjects) {
-                if (!obj) continue;
-
-                obj->m_isDisabled = false;
-                obj->m_isDisabled2 = false;
-            }
-
-            disabledObjects.clear();
-
+            xdbot::trajectory_physics::collisionCheckObjects(this, p0, objects, p2, p3);
             return;
         }
 
@@ -522,12 +633,7 @@ class $modify(GJBaseGameLayer) {
                 return false;
 
             ShowTrajectory::snapshotObject(p1);
-
-            bool ret = GJBaseGameLayer::canBeActivatedByPlayer(p0, p1);
-            if (ret)
-                ShowTrajectory::rememberActivated(p0, p1);
-
-            return ret;
+            return GJBaseGameLayer::canBeActivatedByPlayer(p0, p1);
         }
 
         return GJBaseGameLayer::canBeActivatedByPlayer(p0, p1);
@@ -544,9 +650,7 @@ class $modify(GJBaseGameLayer) {
 
     void playerTouchedTrigger(PlayerObject * p0, EffectGameObject * p1) {
         if (t.creatingTrajectory && ShowTrajectory::isFakePlayer(p0)) {
-            ShowTrajectory::snapshotObject(p1);
-            ShowTrajectory::rememberActivated(p0, p1);
-            GJBaseGameLayer::playerTouchedTrigger(p0, p1);
+            xdbot::trajectory_physics::triggerObject(p1, this, p0);
         } else if (!t.creatingTrajectory)
             GJBaseGameLayer::playerTouchedTrigger(p0, p1);
     }
