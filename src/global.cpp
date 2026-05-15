@@ -216,35 +216,54 @@ float Global::getTPS() {
 
 int Global::getCurrentFrame(bool editor) {
     auto& g = Global::get();
-    auto* pl = PlayLayer::get();
 
-    if (pl && g.m_frameCount > 0) {
-        return std::max(g.m_frameCount - g.frameOffset, 0);
-    }
+    int frame = g.m_frameCount - g.frameOffset;
 
-    if (!pl)
-        return 0;
-
-    return std::max(g.m_frameCount - g.frameOffset, 0);
+    return std::max(frame, 0);
 }
 
 class $modify(FrameCounterGJBaseGameLayer, GJBaseGameLayer) {
+
     void processQueuedButtons(float dt, bool clearInputQueue) {
         auto& g = Global::get();
-        auto* playLayer = PlayLayer::get();
-        bool isPlaying = playLayer && !playLayer->m_hasCompletedLevel && !playLayer->m_isPaused &&
-                         playLayer->m_gameState.m_currentProgress > 0 &&
-                         !playLayer->m_player1->m_isDead &&
-                         (!playLayer->m_gameState.m_isDualMode || !playLayer->m_player2->m_isDead);
 
-        if (g.state == state::playing && !g.tpsEnabled && g.macro.framerate != 240.f) {
+        auto* pl = PlayLayer::get();
+
+        bool isPlaying =
+            pl &&
+            !pl->m_hasCompletedLevel &&
+            !pl->m_isPaused &&
+            pl->m_player1 &&
+            !pl->m_player1->m_isDead &&
+            (!pl->m_gameState.m_isDualMode ||
+             (pl->m_player2 &&
+              !pl->m_player2->m_isDead));
+
+        if (g.state == state::playing &&
+            !g.tpsEnabled &&
+            g.macro.framerate != 240.f) {
             g.setTpsEnabled(true);
         }
 
-        GJBaseGameLayer::processQueuedButtons(dt, clearInputQueue);
+        GJBaseGameLayer::processQueuedButtons(
+            dt,
+            clearInputQueue
+        );
 
-        if (isPlaying && !g.schedulerFrozenUpdate)
-            g.m_frameCount = static_cast<int>(playLayer->m_gameState.m_currentProgress / 2);
+        if (!isPlaying)
+            return;
+
+        if (g.schedulerFrozenUpdate)
+            return;
+
+        int frame = static_cast<int>(
+            pl->m_gameState.m_levelTime *
+            Global::getTPS()
+        );
+
+        frame++;
+
+        g.m_frameCount = std::max(frame, 0);
     }
 };
 
@@ -366,30 +385,33 @@ void Global::toggleFrameStepper() {
     auto& g = Global::get();
 
     g.frameStepper = !g.frameStepper;
-    g.mod->setSavedValue("macro_frame_stepper", g.frameStepper);
+
+    g.mod->setSavedValue(
+        "macro_frame_stepper",
+        g.frameStepper
+    );
+
+    g.stepFrame = false;
+    g.suppressNextFrameStep = false;
+    g.stepFrameDraw = false;
+    g.stepFrameDrawMultiple = 0;
+    g.stepFrameParticle = false;
+
+    PracticeFix::clearStoredFrames();
 
     if (!g.frameStepper) {
-        g.stepFrame = false;
-        g.suppressNextFrameStep = false;
-        g.stepFrameDraw = false;
-        g.stepFrameDrawMultiple = 0;
-        g.stepFrameParticle = false;
-        g.schedulerOverflow = 0.0;
-        g.schedulerStepCount = 1;
-        g.schedulerUpdating = false;
-        g.schedulerFrozenUpdate = false;
-        PracticeFix::clearStoredFrames();
         Global::syncFrameStepperMusic();
     } else {
-        g.stepFrame = false;
-        g.suppressNextFrameStep = false;
-        PracticeFix::clearStoredFrames();
         PracticeFix::saveFrameStepperFrame();
     }
 
-    if (auto rl = static_cast<RecordLayer*>(g.layer)) {
+    if (auto rl =
+        static_cast<RecordLayer*>(g.layer)) {
+
         if (rl->frameStepperToggle)
-            rl->frameStepperToggle->toggle(g.frameStepper);
+            rl->frameStepperToggle->toggle(
+                g.frameStepper
+            );
     }
 
     Interface::updateButtons();
@@ -532,7 +554,6 @@ $execute {
 
     g.frameOffset = g.mod->getSettingValue<int64_t>("frame_offset");
     g.lockDelta = g.mod->getSettingValue<bool>("lock_delta");
-    g.lockDeltaFast = g.mod->getSettingValue<std::string>("lock_delta_mode") == "Fast";
     g.stopPlaying = g.mod->getSettingValue<bool>("auto_stop_playing");
 
     if (g.mod->getSettingValue<std::string>("macro_accuracy") == "Frame Fixes")

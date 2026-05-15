@@ -26,17 +26,6 @@ $execute {
         +[](bool value) {
             auto& g = Global::get();
             g.lockDelta = value;
-            g.schedulerOverflow = 0.0;
-            g.schedulerStepCount = 1;
-        },
-        Mod::get());
-
-    geode::listenForSettingChanges<std::string>(
-        "lock_delta_mode",
-        +[](std::string value) {
-            auto& g = Global::get();
-            g.lockDeltaFast = value == "Fast";
-            g.schedulerOverflow = 0.0;
             g.schedulerStepCount = 1;
         },
         Mod::get());

@@ -1,15 +1,16 @@
 #include "../includes.hpp"
-#include "../ui/record_layer.hpp"
 #include "../global.hpp"
 #include "../practice_fixes/practice_fixes.hpp"
+#include "../ui/record_layer.hpp"
 
-#include <Geode/modify/PlayerObject.hpp>
-#include <Geode/modify/PlayLayer.hpp>
-#include <Geode/modify/EndLevelLayer.hpp>
-#include <Geode/modify/GJGameLevel.hpp>
 #include <Geode/modify/CCScheduler.hpp>
 #include <Geode/modify/EffectGameObject.hpp>
+#include <Geode/modify/EndLevelLayer.hpp>
+#include <Geode/modify/GJBaseGameLayer.hpp>
+#include <Geode/modify/GJGameLevel.hpp>
 #include <Geode/modify/GameLevelOptionsLayer.hpp>
+#include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/PlayerObject.hpp>
 
 const std::unordered_set<int> shaderIDs = {2904,2905,2907,2909,2910,2911,2912,2913,2914,2915,2916,2917,2919,2920,2921,2922,2923,2924};
 
@@ -31,14 +32,14 @@ class $modify(CCScheduler) {
 
             return CCScheduler::update(dt);
         }
-        #ifndef GEODE_IS_IOS
+#ifndef GEODE_IS_IOS
         if (g.renderer.recording) {
             if (g.currentPitch != 1.f)
                 Global::updatePitch(1.f);
 
             return CCScheduler::update(dt);
         }
-        #endif
+#endif
 
         float speedhack = 1.f;
 
@@ -140,37 +141,6 @@ class $modify(CCScheduler) {
             g.schedulerStepCount = 1;
         };
 
-        if (g.lockDeltaFast && g.state == state::playing) {
-            int remainingSteps = steps;
-
-            while (remainingSteps > 0) {
-                int safeSteps = remainingSteps;
-                int frame = Global::getCurrentFrame();
-                if (frame < 0)
-                    frame = 0;
-
-                if (g.currentAction < g.macro.inputs.size()) {
-                    uint64_t nextFrame = g.macro.inputs[g.currentAction].frame;
-                    safeSteps = nextFrame > static_cast<uint64_t>(frame)
-                                    ? static_cast<int>(std::min<uint64_t>(
-                                          nextFrame - static_cast<uint64_t>(frame), remainingSteps))
-                                    : 0;
-                }
-
-                if (safeSteps > 0) {
-                    runUpdate(safeSteps, physicsDt * static_cast<double>(safeSteps));
-                    remainingSteps -= safeSteps;
-                    continue;
-                }
-
-                runUpdate(1, static_cast<double>(dt) * speedhack);
-                remainingSteps--;
-            }
-
-            g.schedulerUpdating = false;
-            return;
-        }
-
         for (int i = 0; i < steps; i++)
             runUpdate(1, physicsDt);
 
@@ -182,15 +152,24 @@ class $modify(CCScheduler) {
 class $modify(PlayerObject) {
 
     void playDeathEffect() {
-        if (!Global::get().mod->getSavedValue<bool>("macro_no_death_effect"))
+        if (!Global::get()
+                 .mod
+                 ->getSavedValue<bool>(
+                     "macro_no_death_effect"
+                 )) {
             PlayerObject::playDeathEffect();
+        }
     }
 
     void playSpawnEffect() {
-        if (!Global::get().mod->getSavedValue<bool>("macro_no_respawn_flash"))
+        if (!Global::get()
+                 .mod
+                 ->getSavedValue<bool>(
+                     "macro_no_respawn_flash"
+                 )) {
             PlayerObject::playSpawnEffect();
+        }
     }
-
 };
 
 class $modify(PlayLayer) {
@@ -204,194 +183,163 @@ class $modify(PlayLayer) {
 
         auto& g = Global::get();
 
-        if (!g.autosaveEnabled) return;
-        if (!g.autosaveIntervalEnabled) return;
+        if (!g.autosaveEnabled)
+            return;
 
-        if (g.autosaveCheck < g.autosaveInterval) {
+        if (!g.autosaveIntervalEnabled)
+            return;
+
+        if (g.autosaveCheck <
+            g.autosaveInterval) {
+
             g.autosaveCheck += dt;
             return;
         }
-        g.autosaveCheck = 0.f;
-        int currentTime = asp::time::SystemTime::now().timeSinceEpoch().millis();
 
-        Macro::autoSave(m_level, currentTime);
+        g.autosaveCheck = 0.f;
+
+        int currentTime =
+            asp::time::SystemTime::now()
+                .timeSinceEpoch()
+                .millis();
+
+        Macro::autoSave(
+            m_level,
+            currentTime
+        );
     }
 
-    void destroyPlayer(PlayerObject * p0, GameObject * p1) {
-        if (p0 != m_player1 && p0 != m_player2) return PlayLayer::destroyPlayer(p0, p1);
-        
+    void destroyPlayer(
+        PlayerObject* player,
+        GameObject* object
+    ) {
+        if (player != m_player1 &&
+            player != m_player2) {
+
+            return PlayLayer::destroyPlayer(
+                player,
+                object
+            );
+        }
+
         if (!m_fields->slopeFix)
-            m_fields->slopeFix = p1;
+            m_fields->slopeFix = object;
 
         auto& g = Global::get();
 
-        bool player2 = p0 == m_player2;
+        bool player2 =
+            player == m_player2;
 
-        if (!g.mod->getSavedValue<bool>("macro_noclip_p1") && !player2)
-            PlayLayer::destroyPlayer(p0, p1);
-        else if (!g.mod->getSavedValue<bool>("macro_noclip_p2") && player2)
-            PlayLayer::destroyPlayer(p0, p1);
-        else if (!g.mod->getSavedValue<bool>("macro_noclip") || m_fields->slopeFix == p1)
-            PlayLayer::destroyPlayer(p0, p1);
-        else
-            Global::get().safeMode = true;
-        
-        if (getActionByTag(16)) {            
-            if (g.mod->getSavedValue<bool>("respawn_time_enabled")) {
-                stopActionByTag(16);
-                CCSequence* seq = CCSequence::create(CCDelayTime::create(g.mod->getSavedValue<double>("respawn_time")), CCCallFunc::create(this, callfunc_selector(PlayLayer::delayedResetLevel)), nullptr);
-                seq->setTag(16);
-                runAction(seq);
-            }
+        bool allowDeath =
+            (!g.mod->getSavedValue<bool>(
+                 "macro_noclip"
+             )) ||
+            (!g.mod->getSavedValue<bool>(
+                 player2
+                     ? "macro_noclip_p2"
+                     : "macro_noclip_p1"
+             )) ||
+            (m_fields->slopeFix == object);
+
+        if (allowDeath) {
+            PlayLayer::destroyPlayer(
+                player,
+                object
+            );
+        } else {
+            g.safeMode = true;
+        }
+
+        if (getActionByTag(16) &&
+            g.mod->getSavedValue<bool>(
+                "respawn_time_enabled"
+            )) {
+
+            stopActionByTag(16);
+
+            auto* seq =
+                CCSequence::create(
+                    CCDelayTime::create(
+                        g.mod->getSavedValue<double>(
+                            "respawn_time"
+                        )
+                    ),
+                    CCCallFunc::create(
+                        this,
+                        callfunc_selector(
+                            PlayLayer::delayedResetLevel
+                        )
+                    ),
+                    nullptr
+                );
+
+            seq->setTag(16);
+
+            runAction(seq);
         }
     }
 
-    void showNewBest(bool po, int p1, int p2, bool p3, bool p4, bool p5) {
-        if (!Global::get().safeMode || !Mod::get()->getSavedValue<bool>("macro_auto_safe_mode"))
-            PlayLayer::showNewBest(po, p1, p2, p3, p4, p5);
-    };
+    void showNewBest(
+        bool p0,
+        int p1,
+        int p2,
+        bool p3,
+        bool p4,
+        bool p5
+    ) {
+        auto& g = Global::get();
+
+        if (!g.safeMode ||
+            !Mod::get()->getSavedValue<bool>(
+                "macro_auto_safe_mode"
+            )) {
+
+            PlayLayer::showNewBest(
+                p0,
+                p1,
+                p2,
+                p3,
+                p4,
+                p5
+            );
+        }
+    }
 
     void levelComplete() {
         auto& g = Global::get();
 
         g.firstAttempt = true;
 
-        if (g.state == state::recording && g.autosaveEnabled && g.mod->getSavedValue<bool>("autosave_levelend_enabled"))
-            Macro::autoSave(nullptr, g.currentSession);
+        if (g.state == state::recording &&
+            g.autosaveEnabled &&
+            g.mod->getSavedValue<bool>(
+                "autosave_levelend_enabled"
+            )) {
 
-        bool wasTestMode = m_isTestMode;
+            Macro::autoSave(
+                nullptr,
+                g.currentSession
+            );
+        }
 
-        if (g.safeMode && g.mod->getSavedValue<bool>("macro_auto_safe_mode"))
+        bool wasTestMode =
+            m_isTestMode;
+
+        if (g.safeMode &&
+            g.mod->getSavedValue<bool>(
+                "macro_auto_safe_mode"
+            )) {
+
             m_isTestMode = true;
+        }
 
         if (m_isPracticeMode)
             g.safeMode = false;
 
         PlayLayer::levelComplete();
-        
+
         Macro::resetState(true);
 
         m_isTestMode = wasTestMode;
     }
-
-};
-
-class $modify(EndLevelLayer) {
-    
-    void customSetup() {
-        EndLevelLayer::customSetup();
-        auto& g = Global::get();
-
-        if (g.mod->getSettingValue<bool>("endscreen_button")) {
-            cocos2d::CCSize winSize = CCDirector::sharedDirector()->getWinSize();
-
-            CCSprite* sprite =
-                CCSprite::createWithSpriteFrameName("GJ_playBtn2_001.png");
-            sprite->setScale(0.350f);
-
-            CCMenuItemSpriteExtra* btn = CCMenuItemExt::createSpriteExtra(
-                sprite, [this](CCMenuItemSpriteExtra* sender) {
-                    static_cast<RecordLayer*>(Global::get().layer)->openMenu2(sender);
-                });
-            btn->setPosition({160, -99});
-
-            CCLayer* layer = this->getChildByType<CCLayer>(0);
-
-            CCMenu* menu = CCMenu::create();
-            menu->setID("button-menu"_spr);
-            layer->addChild(menu);
-
-            menu->addChild(btn);
-        }
-
-        if (g.layer) {
-            static_cast<RecordLayer*>(g.layer)->cursorWasHidden = false;
-            static_cast<RecordLayer*>(g.layer)->onClose(nullptr);
-        }
-
-        if (!g.safeMode) return;
-
-        if (CCMenu* menu = m_mainLayer->getChildByType<CCMenu>(0)) {
-            if (CCMenuItemSpriteExtra* btn = menu->getChildByType<CCMenuItemSpriteExtra>(0))
-                btn->setPositionX(btn->getPositionX() - 1);
-            if (CCMenuItemSpriteExtra* btn = menu->getChildByType<CCMenuItemSpriteExtra>(1))
-                btn->setPositionX(btn->getPositionX() + 1);
-            if (CCMenuItemSpriteExtra* btn = menu->getChildByType<CCMenuItemSpriteExtra>(2))
-                btn->setPositionX(btn->getPositionX() - 1);
-        }
-
-        if (CCMenu* menu = m_mainLayer->getChildByType<CCMenu>(1)) {
-            if (CCMenuItemSpriteExtra* btn = menu->getChildByType<CCMenuItemSpriteExtra>(0))
-                btn->setPositionX(btn->getPositionX() - 1);
-            if (CCMenuItemSpriteExtra* btn = menu->getChildByType<CCMenuItemSpriteExtra>(1))
-                btn->setPositionX(btn->getPositionX() + 1);
-        }
-
-        if (!g.mod->getSavedValue<bool>("macro_auto_safe_mode")) return;
-
-        CCLabelBMFont* lbl = CCLabelBMFont::create("Auto-safe-mode", "goldFont.fnt");
-        lbl->setPosition({ 3.5, 10 });
-        lbl->setOpacity(155);
-        lbl->setID("safe-mode-label"_spr);
-        lbl->setScale(0.55f);
-        lbl->setAnchorPoint({ 0, 0.5 });
-
-        addChild(lbl);
-    }
-
-    void onHideLayer(CCObject* obj) {
-        EndLevelLayer::onHideLayer(obj);
-
-        if (CCNode* lbl = getChildByID("safe-mode-label"_spr))
-            lbl->setVisible(!lbl->isVisible());
-    }
-
-};
-
-class $modify(GJGameLevel) {
-
-    void savePercentage(int p0, bool p1, int p2, int p3, bool p4) {
-        if (!Global::get().safeMode || !Mod::get()->getSavedValue<bool>("macro_auto_safe_mode"))
-            GJGameLevel::savePercentage(p0, p1, p2, p3, p4);
-    }
-};
-
-class $modify(EffectGameObject) {
-
-    void triggerObject(GJBaseGameLayer* p0, int p1, gd::vector<int> const* p2) {
-        if (!Global::get().disableShaders)
-            return EffectGameObject::triggerObject(p0, p1, p2);
-
-        if (!shaderIDs.contains(m_objectID) || !PlayLayer::get()) {
-            EffectGameObject::triggerObject(p0, p1, p2);
-        }
-        else
-            Global::get().safeMode = true;
-	}
-
-};
-
-class $modify(GameLevelOptionsLayer) {
-
-    static GameLevelOptionsLayer* create(GJGameLevel* level) {
-        GameLevelOptionsLayer* ret = GameLevelOptionsLayer::create(level);
-
-        if (!Mod::get()->getSettingValue<bool>("level_settings_button")) return ret;
-
-        CCSprite* sprite = CCSprite::createWithSpriteFrameName("GJ_playBtn2_001.png");
-        sprite->setScale(0.350f);
-
-        CCMenuItemSpriteExtra* btn = CCMenuItemExt::createSpriteExtra(
-            sprite, [ret](CCMenuItemSpriteExtra* sender) {
-                static_cast<RecordLayer*>(Global::get().layer)->openMenu2(sender);
-            });
-        btn->setPosition({-174, -114});
-
-        if (CCLayer* layer = ret->getChildByType<CCLayer>(0))
-            if (CCMenu* menu = layer->getChildByType<CCMenu>(1))
-                menu->addChild(btn);
-
-        return ret;
-    }
-    
 };

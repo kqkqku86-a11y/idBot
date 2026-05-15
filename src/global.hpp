@@ -85,7 +85,6 @@ class Global {
     bool trajectoryBothSides = false;
     bool p2mirror = false;
     bool lockDelta = false;
-    bool lockDeltaFast = false;
     bool stopPlaying = false;
     bool tpsEnabled = false;
     float tps = 240.f;
