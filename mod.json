@@ -1,5 +1,5 @@
 {
-	"geode": "5.6.1",
+	"geode": "5.7.1",
 	"gd": {
 		"win": "2.2081",
 		"mac": "2.2081",
@@ -38,7 +38,7 @@
 		"frame_offset": {
 			"name": "Frame Offset",
 			"description": "Adds a frame offset when recording or playing macros.",
-			"type": "int", 
+			"type": "int",
 			"default": 0,
 			"min": -8,
 			"max": 8
@@ -47,7 +47,7 @@
 			"name": "Button at Endscreen",
 			"description": "Shows the menu button at the endscreen.",
 			"type": "bool",
-			"default": false 
+			"default": false
 		},
 		"open_menu_instant": {
 			"name": "Open Menu Instantly",
@@ -107,7 +107,7 @@
 			"name": "Recording Keybind",
 			"description": "The keybind to start and stop recording a macro.",
 			"type": "keybind",
-			"default": "Alt+G",	
+			"default": "Alt+G",
 			"category": "gameplay",
 			"migrate-from": "zilko.xdbot/toggle_recording"
 		},
@@ -123,7 +123,7 @@
 			"name": "Speedhack Keybind",
 			"description": "The keybind to toggle speedhack.",
 			"type": "keybind",
-			"default": "Alt+S",	
+			"default": "Alt+S",
 			"category": "gameplay",
 			"migrate-from": "zilko.xdbot/toggle_speedhack"
 		},
@@ -131,7 +131,7 @@
 			"name": "Noclip Keybind",
 			"description": "The keybind to toggle noclip.",
 			"type": "keybind",
-			"default": "Alt+N",	
+			"default": "Alt+N",
 			"category": "gameplay",
 			"migrate-from": "zilko.xdbot/toggle_noclip"
 		},
@@ -139,7 +139,7 @@
 			"name": "Frame Stepper Keybind",
 			"description": "The keybind to toggle the frame stepper.",
 			"type": "keybind",
-			"default": "Alt+C",	
+			"default": "Alt+C",
 			"category": "gameplay",
 			"migrate-from": "zilko.xdbot/toggle_frame_stepper"
 		},
@@ -147,7 +147,7 @@
 			"name": "Step Frame Keybind",
 			"description": "The keybind to step a frame when the frame stepper is enabled.",
 			"type": "keybind",
-			"default": "V",	
+			"default": "V",
 			"category": "gameplay",
 			"migrate-from": "zilko.xdbot/step_frame"
 		},
@@ -234,6 +234,26 @@
 			"type": "string",
 			"default": "Accuracy",
 			"one-of": ["Accuracy", "Fast"]
+		},
+		"lock_delta_real_time": {
+			"name": "Lock Delta Real Time",
+			"description": "When disabled, caps how many physics steps lock delta can process per visual frame.",
+			"type": "bool",
+			"default": true
+		},
+		"lock_delta_max_upr": {
+			"name": "Lock Delta Max UPR",
+			"description": "Maximum updates per render when lock delta real time is disabled.",
+			"type": "int",
+			"default": 10,
+			"min": 1,
+			"max": 200
+		},
+		"lock_delta_use_visual_updates": {
+			"name": "Lock Delta Visual Updates",
+			"description": "Scales the max UPR cap by the current visual FPS when lock delta real time is disabled.",
+			"type": "bool",
+			"default": true
 		}
 	},
 	"resources": {
