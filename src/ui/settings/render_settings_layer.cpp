@@ -32,8 +32,14 @@ void RenderSettingsLayer::onDefaults(CCObject*) {
                 return;
             auto& bot = Bot::get();
 
-            bot.mod->setSavedValue("render_args", std::string("-pix_fmt yuv420p"));
-            bot.mod->setSavedValue("render_audio_args", std::string(""));
+#ifndef GEODE_IS_IOS
+            if (!Renderer::shouldUseAPI()) {
+#endif
+                bot.mod->setSavedValue("render_args", std::string("-pix_fmt yuv420p"));
+                bot.mod->setSavedValue("render_audio_args", std::string(""));
+#ifndef GEODE_IS_IOS
+            }
+#endif
             bot.mod->setSavedValue("render_video_args",
                                  std::string("colorspace=all=bt709:iall=bt470bg:fast=1"));
             bot.mod->setSavedValue("render_only_song", false);
@@ -149,7 +155,7 @@ bool RenderSettingsLayer::init() {
     lbl = CCLabelBMFont::create("Video Args:", "bigFont.fnt");
     lbl->setAnchorPoint({0, 0.5});
 #ifndef GEODE_IS_IOS
-    lbl->setOpacity(usingApi ? 90 : 200);
+    lbl->setOpacity(200);
 #else
     lbl->setOpacity(200);
 #endif
@@ -161,7 +167,7 @@ bool RenderSettingsLayer::init() {
     videoArgsInput->setPosition({41.f, 24.25f});
     videoArgsInput->setWidth(140.25f);
 #ifndef GEODE_IS_IOS
-    videoArgsInput->setString(usingApi ? "" : mod->getSavedValue<std::string>("render_video_args"));
+    videoArgsInput->setString(mod->getSavedValue<std::string>("render_video_args"));
 #else
     videoArgsInput->setString(mod->getSavedValue<std::string>("render_video_args"));
 #endif
@@ -173,7 +179,7 @@ bool RenderSettingsLayer::init() {
     videoArgsInput->getInputNode()->m_textField->setAnchorPoint({0.5f, 0.5f});
     videoArgsInput->getBGSprite()->setContentHeight(39.f);
 #ifndef GEODE_IS_IOS
-    videoArgsInput->getBGSprite()->setOpacity(usingApi ? 40 : 75);
+    videoArgsInput->getBGSprite()->setOpacity(75);
 #else
     videoArgsInput->getBGSprite()->setOpacity(75);
 #endif
@@ -354,9 +360,6 @@ bool RenderSettingsLayer::init() {
         argsInput->getInputNode()->m_textLabel->setOpacity(100);
         audioArgsInput->setEnabled(false);
         audioArgsInput->getInputNode()->m_textLabel->setOpacity(100);
-        videoArgsInput->setEnabled(false);
-        videoArgsInput->getInputNode()->m_textLabel->setOpacity(100);
-
         extensionInput->setEnabled(false);
         extensionInput->getInputNode()->m_textLabel->setOpacity(100);
         extensionInput->getBGSprite()->setOpacity(40);

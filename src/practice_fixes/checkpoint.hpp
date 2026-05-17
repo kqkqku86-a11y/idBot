@@ -712,7 +712,9 @@ struct SupplementalPlayerState {
         p->m_ignoreDamage                   = m_ignoreDamage;
         p->m_enable22Changes                = m_enable22Changes;
         p->m_isGoingLeft                    = m_isGoingLeft;
-        p->m_vehicleSize                    = m_vehicleSize;
+        bool shouldBeMini = m_vehicleSize != 1.f;
+        p->m_vehicleSize                    = shouldBeMini ? 1.f : 0.6f;
+        p->togglePlayerScale(shouldBeMini, false);
         p->m_playerSpeed                    = m_playerSpeed;
         p->m_shipRotation                   = m_shipRotation;
         p->m_unkUnused3                     = m_unkUnused3;

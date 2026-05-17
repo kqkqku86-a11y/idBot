@@ -157,6 +157,8 @@ class Bot {
 
         if (Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
             eclipse::config::setInternal("global.tpsbypass.toggle", enabled);
+            if (enabled)
+                eclipse::config::setInternal("global.tpsbypass", static_cast<double>(tps));
         }
     }
 
@@ -172,10 +174,6 @@ class Bot {
 
         for (auto& cb : onTpsChanged)
             cb(static_cast<double>(newTps));
-
-        if (Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
-            eclipse::config::setInternal("global.tpsbypass", static_cast<double>(newTps));
-        }
     }
 
     bool previousTpsEnabled = false;

@@ -64,6 +64,8 @@ uint64_t trajectoryRefreshSignature(Bot const& bot, PlayLayer* pl) {
 
         mixFloat(player->getPositionX());
         mixFloat(player->getPositionY());
+        mixFloat(player->getScale());
+        mixFloat(player->m_vehicleSize);
         mixFloat(player->getRotation());
         mixFloat(static_cast<float>(player->m_yVelocity));
         mixFloat(static_cast<float>(player->m_platformerXVelocity));
@@ -1066,7 +1068,14 @@ class $modify(PlayerObject) {
             xdbot::trajectory_physics::togglePlayerScale(this, enable);
         } else {
             PlayerObject::togglePlayerScale(enable, noEffects);
+            ShowTrajectory::refreshIfNeeded();
         }
+    }
+
+    void updatePlayerScale() {
+        PlayerObject::updatePlayerScale();
+        if (!ShowTrajectory::isFakePlayer(this))
+            ShowTrajectory::refreshIfNeeded();
     }
 
     void flipGravity(bool flip, bool noEffects) {

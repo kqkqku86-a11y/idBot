@@ -12,6 +12,9 @@
 #include <Geode/modify/ShaderLayer.hpp>
 #include <Geode/ui/GeodeUI.hpp>
 
+#include <string_view>
+#include <utility>
+
 #ifdef GEODE_IS_WINDOWS
 #include "../utils/subprocess.hpp"
 #endif
@@ -20,6 +23,23 @@
 
 static bool writePCMWav(const std::filesystem::path& outPath, std::span<const float> pcm, FMOD::System* system);
 bool m_cbsWasEnabled;
+
+std::string apiColorspaceArgs(std::string const& videoArgs) {
+    constexpr std::string_view prefix = "colorspace=";
+    if (videoArgs.rfind(prefix, 0) == 0)
+        return videoArgs.substr(prefix.size());
+    return videoArgs;
+}
+
+void flipFrameVertically(std::vector<uint8_t>& frame, unsigned width, unsigned height) {
+    size_t rowSize = static_cast<size_t>(width) * 4;
+    for (unsigned y = 0; y < height / 2; ++y) {
+        auto* top = frame.data() + static_cast<size_t>(y) * rowSize;
+        auto* bottom = frame.data() + static_cast<size_t>(height - 1 - y) * rowSize;
+        for (size_t i = 0; i < rowSize; ++i)
+            std::swap(top[i], bottom[i]);
+    }
+}
 
 class $modify(CCParticleSystem) {
     void initParticle(sCCParticle* p0) {
@@ -505,8 +525,8 @@ void Renderer::recordThread() {
     settings.m_height            = height;
     settings.m_fps               = static_cast<uint16_t>(fps);
     settings.m_outputFile        = path;
-    settings.m_colorspaceFilters = usingApi ? "" : videoArgs;
-    settings.m_doVerticalFlip    = true;
+    settings.m_colorspaceFilters = usingApi ? apiColorspaceArgs(videoArgs) : videoArgs;
+    settings.m_doVerticalFlip    = !usingApi;
 
 #ifdef GEODE_IS_WINDOWS
     subprocess::Popen process;
@@ -557,6 +577,7 @@ void Renderer::recordThread() {
 
     while (recording) {
         if (usingApi) {
+            flipFrameVertically(m_currentFrame, width, height);
             auto res = ffmpeg.writeFrame(m_currentFrame);
             if (res.isErr()) {
                 Loader::get()->queueInMainThread([] {

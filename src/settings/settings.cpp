@@ -128,12 +128,13 @@ void Settings::loadRuntimeState(Bot& bot) const {
     bot.tpsEnabled = saved<bool>("macro_tps_enabled");
     bot.tps = saved<double>("macro_tps");
 
-    if (Loader::get()->getLoadedMod("eclipse.eclipse-menu")) {
-        geode::queueInMainThread([&bot] {
-            eclipse::config::setInternal("global.tpsbypass.toggle", bot.tpsEnabled);
-            eclipse::config::setInternal("global.tpsbypass", static_cast<double>(bot.tps));
-        });
-    }
+    geode::queueInMainThread([&bot] {
+        if (!Loader::get()->getLoadedMod("eclipse.eclipse-menu"))
+            return;
+
+        eclipse::config::setInternal("global.tpsbypass.toggle", bot.tpsEnabled);
+        eclipse::config::setInternal("global.tpsbypass", static_cast<double>(bot.tps));
+    });
 
     bot.autoclicker = saved<bool>("autoclicker_enabled");
     bot.autoclickerP1 = saved<bool>("autoclicker_p1");
