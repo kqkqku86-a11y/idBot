@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../includes.hpp"
+#include <Geode/Geode.hpp>
 
 namespace xdbot::trajectory_physics {
 void flipGravity(PlayerObject* player, bool gravity);

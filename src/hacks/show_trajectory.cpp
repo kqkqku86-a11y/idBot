@@ -173,13 +173,13 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
     if (!pl || !pl->m_player1)
         return;
 
-    auto& g = Global::get();
-    bool platformerBothSides = g.trajectoryBothSides;
+    auto& bot = Bot::get();
+    bool platformerBothSides = bot.trajectoryBothSides;
 
-    g.safeMode = true;
+    bot.safeMode = true;
 
     t.creatingTrajectory = true;
-    g.creatingTrajectory = true;
+    bot.creatingTrajectory = true;
 
     t.trajectoryNode()->setVisible(true);
     t.trajectoryNode()->clear();
@@ -235,7 +235,7 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
     hideFakePlayer(t.fakePlayer1);
     hideFakePlayer(t.fakePlayer2);
     t.creatingTrajectory = false;
-    g.creatingTrajectory = false;
+    bot.creatingTrajectory = false;
 }
 float rot = 0.f;
 void ShowTrajectory::applyInitialInput(PlayLayer* pl, PlayerObject* player, PlayerObject* realPlayer, int mode) {
@@ -285,7 +285,7 @@ bool ShowTrajectory::iterate(PlayLayer* pl, PlayerObject* player, int mode, coco
 
     CCPoint prevPos = player->getPosition();
 
-    float tps = std::max(Global::getTPS(), 1.f);
+    float tps = std::max(Bot::getTPS(), 1.f);
     double physicsSeconds = 1.0 / tps;
     float timeWarp = std::min(pl->m_gameState.m_timeWarp, 1.f);
     if (timeWarp <= 0.f)
@@ -542,7 +542,7 @@ class $modify(PlayLayer) {
 
         if (!t.trajectoryNode() || t.creatingTrajectory) return;
 
-        if (Global::get().showTrajectory) {
+        if (Bot::get().showTrajectory) {
             ShowTrajectory::updateTrajectory(this);
         }
 

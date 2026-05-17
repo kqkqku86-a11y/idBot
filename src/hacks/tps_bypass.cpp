@@ -1,6 +1,6 @@
 // credits to Eclipse Menu
 
-#include "../includes.hpp"
+#include "../core/bot.hpp"
 #include "../utils/assembler.hpp"
 
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -67,7 +67,7 @@ double getActualProgress(PlayLayer* pl) {
 #ifdef REQUIRE_MODIFIED_DELTA_PATCH
 // function to quickly get the bytes for the patch
 [[nodiscard]] static std::vector<uint8_t> TPStoBytes() {
-    return geode::toBytes<double>(1.0 / static_cast<double>(Global::get().getTPS()));
+    return geode::toBytes<double>(1.0 / static_cast<double>(Bot::get().getTPS()));
 }
 
 geode::Result<> setupModifiedDeltaPatches() {
@@ -89,7 +89,7 @@ geode::Result<> setupModifiedDeltaPatches() {
     patch = patchRes.unwrap();
     (void)patch->disable();
 
-    Global::get().onTpsChanged.push_back([patch](double) {
+    Bot::get().onTpsChanged.push_back([patch](double) {
         patch->updateBytes(TPStoBytes());
     });
 
@@ -112,10 +112,10 @@ geode::Result<> setupModifiedDeltaPatches() {
 #endif
 
     if (patch) {
-        Global::get().onTpsEnabledChanged.push_back([patch](bool enabled) {
+        Bot::get().onTpsEnabledChanged.push_back([patch](bool enabled) {
             (void)patch->toggle(enabled);
         });
-        (void)patch->toggle(Global::get().tpsEnabled);
+        (void)patch->toggle(Bot::get().tpsEnabled);
     }
 
     return geode::Ok();
@@ -235,7 +235,7 @@ void applyPatches() {
         if (addr == sinaps::not_found || bytes.empty()) {
             geode::log::error(
                 "TPS Bypass: Failed to find patch address or bytes (possibly already patched)");
-            Global::get().setTpsEnabled(false);
+            Bot::get().setTpsEnabled(false);
             return;
         }
 
@@ -246,19 +246,19 @@ void applyPatches() {
         } else {
             geode::log::error("TPS Bypass: Failed to patch GJBaseGameLayer::update: {}",
                               res.unwrapErr());
-            Global::get().setTpsEnabled(false);
+            Bot::get().setTpsEnabled(false);
             return;
         }
 
         // patch toggler
         if (patch) {
             // toggle the patch if enabled
-            Global::get().onTpsEnabledChanged.push_back([patch](bool enabled) {
+            Bot::get().onTpsEnabledChanged.push_back([patch](bool enabled) {
                 (void)patch->toggle(enabled);
             });
 
             // set the initial state of the patch
-            (void)patch->toggle(Global::get().tpsEnabled);
+            (void)patch->toggle(Bot::get().tpsEnabled);
         }
 
 // on macOS, we also have to patch instructions in GJBaseGameLayer::getModifiedDelta because it's
@@ -306,7 +306,7 @@ class $modify(TPSBypassGJBGLHook, GJBaseGameLayer) {
 
 #ifndef REQUIRE_MODIFIED_DELTA_PATCH
     double getModifiedDelta(float dt) {
-        return getCustomDelta(dt, static_cast<double>(Global::get().getTPS()));
+        return getCustomDelta(dt, static_cast<double>(Bot::get().getTPS()));
     }
 #endif
 
@@ -317,7 +317,7 @@ class $modify(TPSBypassGJBGLHook, GJBaseGameLayer) {
         // calculate number of steps based on the new TPS
         auto timeWarp = std::min(m_gameState.m_timeWarp, 1.f);
 
-        auto newTPS = static_cast<double>(Global::get().getTPS()) / timeWarp;
+        auto newTPS = static_cast<double>(Bot::get().getTPS()) / timeWarp;
 
         auto spt = 1.0 / newTPS;
         auto steps = std::round(fields->m_extraDelta / spt);
@@ -329,7 +329,7 @@ class $modify(TPSBypassGJBGLHook, GJBaseGameLayer) {
         // we're a bit silly here:
         auto originalLoadingLayer = m_loadingLayer;
         this->m_loadingLayer =
-            std::bit_cast<GJGameLoadingLayer*>(1.0 / static_cast<double>(Global::get().getTPS()));
+            std::bit_cast<GJGameLoadingLayer*>(1.0 / static_cast<double>(Bot::get().getTPS()));
 #endif
 
         GJBaseGameLayer::update(totalDelta);
@@ -348,7 +348,7 @@ class $modify(TPSBypassPLHook, PlayLayer) {
         auto timestamp = m_level->m_timestamp;
         auto currentProgress = m_gameState.m_currentProgress;
         // this is only an issue for 2.2+ levels (with TPS greater than 240)
-        if (timestamp > 0 && Global::get().getTPS() != 240.f) {
+        if (timestamp > 0 && Bot::get().getTPS() != 240.f) {
             // recalculate m_currentProgress based on the actual time passed
             auto progress = getActualProgress(this);
             m_gameState.m_currentProgress = timestamp * progress * 2 / 100.f;
@@ -372,7 +372,7 @@ class $modify(TPSBypassPLHook, PlayLayer) {
         // levelComplete uses m_gameState.m_unkUint2 to store the timestamp
         // also we can't rely on m_level->m_timestamp, because it might not be updated yet
         auto oldTimestamp = m_gameState.m_commandIndex;
-        if (Global::get().getTPS() != 240.f) {
+        if (Bot::get().getTPS() != 240.f) {
             auto ticks = static_cast<uint32_t>(std::round(m_gameState.m_levelTime * 480));
             m_gameState.m_commandIndex = ticks;
         }

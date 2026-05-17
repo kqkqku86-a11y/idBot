@@ -1,7 +1,8 @@
-#include "../includes.hpp"
-#include "../global.hpp"
+#include "../core/bot.hpp"
 #include "../practice_fixes/practice_fixes.hpp"
-#include "../ui/record_layer.hpp"
+#include "../ui/layers/record_layer.hpp"
+
+#include <array>
 
 #include <Geode/modify/CCScheduler.hpp>
 #include <Geode/modify/EffectGameObject.hpp>
@@ -12,30 +13,54 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/PlayerObject.hpp>
 
+namespace {
+constexpr std::array<float, 19> safeValues = {
+    1.0f / 240,
+    1.0f / 120,
+    1.0f / 80,
+    1.0f / 60,
+    1.0f / 48,
+    1.0f / 40,
+    1.0f / 30,
+    1.0f / 24,
+    1.0f / 20,
+    1.0f / 16,
+    1.0f / 15,
+    1.0f / 12,
+    1.0f / 10,
+    1.0f / 8,
+    1.0f / 6,
+    1.0f / 5,
+    1.0f / 4,
+    1.0f / 3,
+    1.0f / 2,
+};
+}
+
 const std::unordered_set<int> shaderIDs = {2904,2905,2907,2909,2910,2911,2912,2913,2914,2915,2916,2917,2919,2920,2921,2922,2923,2924};
 
 class $modify(CCScheduler) {
 
     void update(float dt) {
-        auto& g = Global::get();
+        auto& bot = Bot::get();
 
-        if (g.schedulerUpdating)
+        if (bot.schedulerUpdating)
             return CCScheduler::update(dt);
 
-        if (g.state == state::playing && !g.tpsEnabled && g.macro.framerate != 240.f)
-            g.setTpsEnabled(true);
+        if (bot.state == state::playing && !bot.tpsEnabled && bot.replay.framerate != 240.f)
+            bot.setTpsEnabled(true);
 
-        if (g.state == state::none && !g.speedhackEnabled && !g.tpsEnabled && !g.lockDelta &&
-            !g.frameStepper) {
-            if (g.currentPitch != 1.f)
-                Global::updatePitch(1.f);
+        if (bot.state == state::none && !bot.speedhackEnabled && !bot.tpsEnabled && !bot.lockDelta &&
+            !bot.frameStepper) {
+            if (bot.currentPitch != 1.f)
+                Bot::updatePitch(1.f);
 
             return CCScheduler::update(dt);
         }
 #ifndef GEODE_IS_IOS
-        if (g.renderer.recording) {
-            if (g.currentPitch != 1.f)
-                Global::updatePitch(1.f);
+        if (bot.renderer.recording) {
+            if (bot.currentPitch != 1.f)
+                Bot::updatePitch(1.f);
 
             return CCScheduler::update(dt);
         }
@@ -43,8 +68,8 @@ class $modify(CCScheduler) {
 
         float speedhack = 1.f;
 
-        if (g.speedhackEnabled && !g.frameStepper) {
-            std::string speedhackValue = g.mod->getSavedValue<std::string>("macro_speedhack");
+        if (bot.speedhackEnabled && !bot.frameStepper) {
+            std::string speedhackValue = bot.mod->getSavedValue<std::string>("macro_speedhack");
 
             if (speedhackValue != "0.0" && speedhackValue != "") {
                 speedhack = geode::utils::numFromString<float>(speedhackValue).unwrap();
@@ -54,7 +79,7 @@ class $modify(CCScheduler) {
                 float minDiff = std::abs(decimals - closest);
 
                 for (float value : safeValues) {
-                    if (speedhackValue == "1.0" || g.state == state::none) {
+                    if (speedhackValue == "1.0" || bot.state == state::none) {
                         closest = decimals;
                         break;
                     }
@@ -70,81 +95,81 @@ class $modify(CCScheduler) {
                 speedhack = static_cast<int>(speedhack) + closest;
             }
 
-            Global::updatePitch(speedhack);
+            Bot::updatePitch(speedhack);
         }
 
         if (speedhack != 1.f && PlayLayer::get())
-            g.safeMode = true;
+            bot.safeMode = true;
 
         auto* pl = PlayLayer::get();
         if (!pl || pl->m_isPaused) {
-            g.schedulerOverflow = 0.0;
+            bot.schedulerOverflow = 0.0;
             return CCScheduler::update(dt * speedhack);
         }
 
-        double physicsDt = 1.0 / static_cast<double>(Global::getTPS());
+        double physicsDt = 1.0 / static_cast<double>(Bot::getTPS());
         double timeWarp = std::min(static_cast<double>(pl->m_gameState.m_timeWarp), 1.0);
         double timestep = physicsDt * timeWarp;
         if (timestep <= 0.0)
             timestep = physicsDt;
 
-        if (g.frameStepper) {
+        if (bot.frameStepper) {
             if (pl->m_player1 && pl->m_player1->m_isDead) {
-                if (g.mod->getSavedValue<bool>("macro_instant_respawn"))
+                if (bot.mod->getSavedValue<bool>("macro_instant_respawn"))
                     pl->resetLevel();
                 return;
             }
 
-            g.safeMode = true;
-            if (!g.stepFrame) {
-                g.schedulerUpdating = true;
-                g.schedulerFrozenUpdate = true;
-                g.schedulerStepCount = 1;
+            bot.safeMode = true;
+            if (!bot.stepFrame) {
+                bot.schedulerUpdating = true;
+                bot.schedulerFrozenUpdate = true;
+                bot.schedulerStepCount = 1;
                 CCScheduler::update(0.0f);
-                g.schedulerStepCount = 1;
-                g.schedulerFrozenUpdate = false;
-                g.schedulerUpdating = false;
+                bot.schedulerStepCount = 1;
+                bot.schedulerFrozenUpdate = false;
+                bot.schedulerUpdating = false;
                 return;
             }
 
-            g.stepFrame = false;
-            g.schedulerOverflow = 0.0;
-            g.schedulerUpdating = true;
-            g.schedulerStepCount = 1;
+            bot.stepFrame = false;
+            bot.schedulerOverflow = 0.0;
+            bot.schedulerUpdating = true;
+            bot.schedulerStepCount = 1;
             CCScheduler::update(static_cast<float>(timestep));
-            g.schedulerStepCount = 1;
-            g.schedulerUpdating = false;
+            bot.schedulerStepCount = 1;
+            bot.schedulerUpdating = false;
             PracticeFix::saveFrameStepperFrame();
-            Global::syncFrameStepperMusic();
+            Bot::syncFrameStepperMusic();
             return;
         }
 
-        if (!g.lockDelta) {
-            g.schedulerOverflow = 0.0;
+        if (!bot.lockDelta) {
+            bot.schedulerOverflow = 0.0;
             return CCScheduler::update(dt * speedhack);
         }
 
-        g.schedulerOverflow += static_cast<double>(dt) * timeWarp * speedhack;
-        int steps = static_cast<int>(std::floor(g.schedulerOverflow / timestep));
+        bot.schedulerOverflow += static_cast<double>(dt) * timeWarp * speedhack;
+        int steps = static_cast<int>(std::floor(bot.schedulerOverflow / timestep));
 
         if (steps <= 0)
             return;
 
-        g.schedulerOverflow -= static_cast<double>(steps) * timestep;
-        g.schedulerUpdating = true;
+        bot.schedulerOverflow -= static_cast<double>(steps) * timestep;
+        bot.schedulerUpdating = true;
 
         auto runUpdate = [&](int stepCount, double delta) {
             if (stepCount <= 0)
                 return;
-            g.schedulerStepCount = stepCount;
+            bot.schedulerStepCount = stepCount;
             CCScheduler::update(static_cast<float>(delta));
-            g.schedulerStepCount = 1;
+            bot.schedulerStepCount = 1;
         };
 
         for (int i = 0; i < steps; i++)
             runUpdate(1, physicsDt);
 
-        g.schedulerUpdating = false;
+        bot.schedulerUpdating = false;
     }
 
 };
@@ -152,7 +177,7 @@ class $modify(CCScheduler) {
 class $modify(PlayerObject) {
 
     void playDeathEffect() {
-        if (!Global::get()
+        if (!Bot::get()
                  .mod
                  ->getSavedValue<bool>(
                      "macro_no_death_effect"
@@ -162,7 +187,7 @@ class $modify(PlayerObject) {
     }
 
     void playSpawnEffect() {
-        if (!Global::get()
+        if (!Bot::get()
                  .mod
                  ->getSavedValue<bool>(
                      "macro_no_respawn_flash"
@@ -181,29 +206,29 @@ class $modify(PlayLayer) {
     void postUpdate(float dt) {
         PlayLayer::postUpdate(dt);
 
-        auto& g = Global::get();
+        auto& bot = Bot::get();
 
-        if (!g.autosaveEnabled)
+        if (!bot.autosaveEnabled)
             return;
 
-        if (!g.autosaveIntervalEnabled)
+        if (!bot.autosaveIntervalEnabled)
             return;
 
-        if (g.autosaveCheck <
-            g.autosaveInterval) {
+        if (bot.autosaveCheck <
+            bot.autosaveInterval) {
 
-            g.autosaveCheck += dt;
+            bot.autosaveCheck += dt;
             return;
         }
 
-        g.autosaveCheck = 0.f;
+        bot.autosaveCheck = 0.f;
 
         int currentTime =
             asp::time::SystemTime::now()
                 .timeSinceEpoch()
                 .millis();
 
-        Macro::autoSave(
+        Bot::autoSave(
             m_level,
             currentTime
         );
@@ -225,16 +250,16 @@ class $modify(PlayLayer) {
         if (!m_fields->slopeFix)
             m_fields->slopeFix = object;
 
-        auto& g = Global::get();
+        auto& bot = Bot::get();
 
         bool player2 =
             player == m_player2;
 
         bool allowDeath =
-            (!g.mod->getSavedValue<bool>(
+            (!bot.mod->getSavedValue<bool>(
                  "macro_noclip"
              )) ||
-            (!g.mod->getSavedValue<bool>(
+            (!bot.mod->getSavedValue<bool>(
                  player2
                      ? "macro_noclip_p2"
                      : "macro_noclip_p1"
@@ -247,11 +272,11 @@ class $modify(PlayLayer) {
                 object
             );
         } else {
-            g.safeMode = true;
+            bot.safeMode = true;
         }
 
         if (getActionByTag(16) &&
-            g.mod->getSavedValue<bool>(
+            bot.mod->getSavedValue<bool>(
                 "respawn_time_enabled"
             )) {
 
@@ -260,7 +285,7 @@ class $modify(PlayLayer) {
             auto* seq =
                 CCSequence::create(
                     CCDelayTime::create(
-                        g.mod->getSavedValue<double>(
+                        bot.mod->getSavedValue<double>(
                             "respawn_time"
                         )
                     ),
@@ -287,9 +312,9 @@ class $modify(PlayLayer) {
         bool p4,
         bool p5
     ) {
-        auto& g = Global::get();
+        auto& bot = Bot::get();
 
-        if (!g.safeMode ||
+        if (!bot.safeMode ||
             !Mod::get()->getSavedValue<bool>(
                 "macro_auto_safe_mode"
             )) {
@@ -306,27 +331,27 @@ class $modify(PlayLayer) {
     }
 
     void levelComplete() {
-        auto& g = Global::get();
+        auto& bot = Bot::get();
 
-        g.firstAttempt = true;
+        bot.firstAttempt = true;
 
-        if (g.state == state::recording &&
-            g.autosaveEnabled &&
-            g.mod->getSavedValue<bool>(
+        if (bot.state == state::recording &&
+            bot.autosaveEnabled &&
+            bot.mod->getSavedValue<bool>(
                 "autosave_levelend_enabled"
             )) {
 
-            Macro::autoSave(
+            Bot::autoSave(
                 nullptr,
-                g.currentSession
+                bot.currentSession
             );
         }
 
         bool wasTestMode =
             m_isTestMode;
 
-        if (g.safeMode &&
-            g.mod->getSavedValue<bool>(
+        if (bot.safeMode &&
+            bot.mod->getSavedValue<bool>(
                 "macro_auto_safe_mode"
             )) {
 
@@ -334,11 +359,11 @@ class $modify(PlayLayer) {
         }
 
         if (m_isPracticeMode)
-            g.safeMode = false;
+            bot.safeMode = false;
 
         PlayLayer::levelComplete();
 
-        Macro::resetState(true);
+        Bot::resetState(true);
 
         m_isTestMode = wasTestMode;
     }

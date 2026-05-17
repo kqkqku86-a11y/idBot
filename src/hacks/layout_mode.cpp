@@ -1,4 +1,4 @@
-#include "../includes.hpp"
+#include "../core/bot.hpp"
 #include <Geode/modify/GameObject.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
@@ -14,9 +14,9 @@ class $modify(LayoutModePL, PlayLayer) {
     };
     
     void processCreateObjectsFromSetup() {
-        auto& g = Global::get();
-        g.layoutMode = Mod::get()->getSavedValue<bool>("macro_layout_mode");
-        if (g.layoutMode) {
+        auto& bot = Bot::get();
+        bot.layoutMode = Mod::get()->getSavedValue<bool>("macro_layout_mode");
+        if (bot.layoutMode) {
             m_fields->m_didApply = true;
         }
         

@@ -1,33 +1,33 @@
-#include "../includes.hpp"
+#include "../core/bot.hpp"
 #include "clickbot.hpp"
 
 #include <Geode/modify/GJBaseGameLayer.hpp>
 
 $execute { 
-    auto & g = Global::get();
+    auto & bot = Bot::get();
 
-    if (!g.mod->setSavedValue("clickbot_defaults5", true)) {
-        g.mod->setSavedValue("clickbot_holding_only", true);
-        g.mod->setSavedValue("clickbot_playing_only", false);
+    if (!bot.mod->setSavedValue("clickbot_defaults5", true)) {
+        bot.mod->setSavedValue("clickbot_holding_only", true);
+        bot.mod->setSavedValue("clickbot_playing_only", false);
     }
 
-    if (!g.mod->setSavedValue("clickbot_defaults4", true)) {
-        std::filesystem::path dir = g.mod->getResourcesDir();
+    if (!bot.mod->setSavedValue("clickbot_defaults4", true)) {
+        std::filesystem::path dir = bot.mod->getResourcesDir();
         ClickSetting setts;
 
         for (const auto& str : buttonNames) {
             setts.path = dir / fmt::format("default_{}.mp3", str);
             matjson::Value data = matjson::Serialize<ClickSetting>::to_json(setts);
-            g.mod->setSavedValue(str, data);
+            bot.mod->setSavedValue(str, data);
         }
 
-        g.mod->setSavedValue("clickbot_volume", 100);
-        g.mod->setSavedValue("clickbot_pitch", 1.f);
+        bot.mod->setSavedValue("clickbot_volume", 100);
+        bot.mod->setSavedValue("clickbot_pitch", 1.f);
     }
 
-    g.clickbotEnabled = g.mod->getSavedValue<bool>("clickbot_enabled");
-    g.clickbotOnlyPlaying = g.mod->getSavedValue<bool>("clickbot_playing_only");
-    g.clickbotOnlyHolding = g.mod->getSavedValue<bool>("clickbot_holding_only");
+    bot.clickbotEnabled = bot.mod->getSavedValue<bool>("clickbot_enabled");
+    bot.clickbotOnlyPlaying = bot.mod->getSavedValue<bool>("clickbot_playing_only");
+    bot.clickbotOnlyHolding = bot.mod->getSavedValue<bool>("clickbot_holding_only");
 
     Clickbot::updateSounds();
 
@@ -37,15 +37,15 @@ class $modify(GJBaseGameLayer) {
     
     void handleButton(bool hold, int button, bool player2) {
         GJBaseGameLayer::handleButton(hold, button, player2);
-        auto& g = Global::get();
+        auto& bot = Bot::get();
 
-        if (!g.clickbotEnabled) return;
-        if (button > 3 || (!hold && g.clickbotOnlyHolding)) return;
+        if (!bot.clickbotEnabled) return;
+        if (button > 3 || (!hold && bot.clickbotOnlyHolding)) return;
 
         PlayLayer* pl = PlayLayer::get();
 
         if (!pl) return;
-        if (g.clickbotOnlyPlaying && g.state != state::playing) return;
+        if (bot.clickbotOnlyPlaying && bot.state != state::playing) return;
 
         std::string btn = button == 1 ? "click" : (button == 2 ? "left" : "right");
         std::string id = (hold ? "hold_" : "release_") + btn;
@@ -94,8 +94,8 @@ void Clickbot::playSound(std::string id) {
     auto& c = get();
     if (!c.system) return updateSounds();
 
-    auto& g = Global::get();
-    matjson::Value data = g.mod->getSavedValue<matjson::Value>(id);
+    auto& bot = Bot::get();
+    matjson::Value data = bot.mod->getSavedValue<matjson::Value>(id);
     ClickSetting settings = matjson::Serialize<ClickSetting>::from_json(data);
 
     if (settings.disabled) return;
@@ -104,7 +104,7 @@ void Clickbot::playSound(std::string id) {
 
     if (!sound) return;
 
-    int masterVol = g.mod->getSavedValue<int64_t>("clickbot_volume");
+    int masterVol = bot.mod->getSavedValue<int64_t>("clickbot_volume");
     if (settings.volume == 0 || masterVol == 0) return;
 
     FMOD_RESULT result;
@@ -115,13 +115,13 @@ void Clickbot::playSound(std::string id) {
     result = c.channel->setVolume((settings.volume / 100.f) * (masterVol / 100.f));
     if (result != FMOD_OK) return log::debug("Click sound errored. ID: 3");
 
-    result = c.channel->setPitch(g.currentPitch);
+    result = c.channel->setPitch(bot.currentPitch);
     if (result != FMOD_OK) return log::debug("Click sound errored. ID: 4");
 
     FMOD::DSP* pitchShifter = c.pitchShifter;
     if (!pitchShifter) return updateSounds();
 
-    result = pitchShifter->setParameterFloat(FMOD_DSP_PITCHSHIFT_PITCH, settings.pitch * g.mod->getSavedValue<float>("clickbot_pitch"));
+    result = pitchShifter->setParameterFloat(FMOD_DSP_PITCHSHIFT_PITCH, settings.pitch * bot.mod->getSavedValue<float>("clickbot_pitch"));
     if (result != FMOD_OK) return log::debug("Click sound errored. ID: 6");
 
     result = c.channel->addDSP(0, pitchShifter);
@@ -140,7 +140,7 @@ void Clickbot::updateSounds() {
     if (!c.system) return;
 
     for (std::string name : buttonNames) {
-        matjson::Value data = Global::get().mod->getSavedValue<matjson::Value>(name);
+        matjson::Value data = Bot::get().mod->getSavedValue<matjson::Value>(name);
         ClickSetting settings = matjson::Serialize<ClickSetting>::from_json(data);
         if (!std::filesystem::exists(settings.path)) continue;
 

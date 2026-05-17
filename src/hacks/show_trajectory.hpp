@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../includes.hpp"
+#include <Geode/Geode.hpp>
+
 #include "../practice_fixes/practice_fixes.hpp"
 
 class TrajectoryNode : public cocos2d::CCDrawNode {

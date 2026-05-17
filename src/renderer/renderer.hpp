@@ -1,6 +1,7 @@
 #pragma once
 
-#include "../includes.hpp"
+#include <Geode/Geode.hpp>
+
 #include "ffmpeg/events.hpp"
 #include "spinlock.hpp"
 

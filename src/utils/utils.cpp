@@ -1,4 +1,5 @@
 #include "utils.hpp"
+#include "../settings/settings.hpp"
 
 using namespace geode::prelude;
 
@@ -24,14 +25,14 @@ std::string Utils::formatTime(std::time_t time) {
 }
 
 std::string Utils::getTexture() {
-    cocos2d::ccColor3B color = Mod::get()->getSettingValue<cocos2d::ccColor3B>("background_color");
+    cocos2d::ccColor3B color = Settings::get().value<cocos2d::ccColor3B>("background_color");
     std::string texture = color == ccc3(51, 68, 153) ? "GJ_square02.png" : "GJ_square06.png";
     
     return texture;
 }
 
 void Utils::setBackgroundColor(geode::NineSlice* bg) {
-    cocos2d::ccColor3B color = Mod::get()->getSettingValue<cocos2d::ccColor3B>("background_color");
+    cocos2d::ccColor3B color = Settings::get().value<cocos2d::ccColor3B>("background_color");
     
     if (color == ccc3(51, 68, 153)) {
         color = ccc3(255, 255, 255);
@@ -44,4 +45,25 @@ PauseLayer* Utils::getPauseLayer() {
         return scene->getChildByType<PauseLayer>(0);
     
     return nullptr;
+}
+
+void Utils::setTextInputEnabled(
+    TextInput* input,
+    bool enabled,
+    GLubyte enabledBg,
+    GLubyte disabledBg,
+    GLubyte enabledText,
+    GLubyte disabledText) 
+{
+    if (!input) return;
+
+    input->getBGSprite()->setOpacity(enabled ? enabledBg : disabledBg);
+    input->setEnabled(enabled);
+    input->getInputNode()->m_textLabel->setOpacity(enabled ? enabledText : disabledText);
+
+    if (!enabled) {
+        input->getInputNode()->detachWithIME();
+        input->getInputNode()->onClickTrackNode(false);
+        input->getInputNode()->m_cursor->setVisible(false);
+    }
 }

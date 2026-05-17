@@ -23,19 +23,21 @@ struct HeldButtonState {
 
     void capture(PlayLayer* pl) {
         valid = false;
-        if (!pl || !pl->m_uiLayer)
-            return;
+        if (!pl || !pl->m_uiLayer) return;
 
         p1Holding = pl->m_uiLayer->m_p1Jumping || pl->m_uiLayer->m_p1TouchId != -1;
         p2Holding = pl->m_uiLayer->m_p2Jumping || pl->m_uiLayer->m_p2TouchId != -1;
+
         if (pl->m_player1) {
             p1Left = pl->m_player1->m_holdingLeft || pl->m_player1->m_holdingButtons[2];
             p1Right = pl->m_player1->m_holdingRight || pl->m_player1->m_holdingButtons[3];
         }
+
         if (pl->m_player2) {
             p2Left = pl->m_player2->m_holdingLeft || pl->m_player2->m_holdingButtons[2];
             p2Right = pl->m_player2->m_holdingRight || pl->m_player2->m_holdingButtons[3];
         }
+
         valid = true;
     }
 };
@@ -43,6 +45,34 @@ struct HeldButtonState {
 static HeldButtonState& heldButtonState() {
     static HeldButtonState state;
     return state;
+}
+
+namespace {
+
+void restoreHeldButtons(PlayLayer* pl, const HeldButtonState& held) {
+    if (!pl || !held.valid)
+        return;
+
+    auto queueIfChanged = [pl](int button, bool down, bool player2) {
+        auto* player = player2 ? pl->m_player2 : pl->m_player1;
+        if (!player || player->m_holdingButtons[button] == down)
+            return;
+        pl->queueButton(button, down, player2, 0.0);
+    };
+
+    queueIfChanged(1, held.p1Holding, false);
+    if (pl->m_isPlatformer) {
+        queueIfChanged(2, held.p1Left, false);
+        queueIfChanged(3, held.p1Right, false);
+    }
+
+    if (pl->m_gameState.m_isDualMode && pl->m_levelSettings->m_twoPlayerMode) {
+        queueIfChanged(1, held.p2Holding, true);
+        if (pl->m_isPlatformer) {
+            queueIfChanged(2, held.p2Left, true);
+            queueIfChanged(3, held.p2Right, true);
+        }
+    }
 }
 
 struct PracticeCheckpointData {
@@ -90,18 +120,18 @@ struct PracticeCheckpointData {
         calcNonEffectObjectsSize = plObj->m_calcNonEffectObjectsSize;
         brokenObjects = broken;
         randomSeed = GameToolbox::getfast_srand();
-        auto& g = Global::get();
-        tps = g.tps;
-        tpsEnabled = g.tpsEnabled;
-        frame = Global::getCurrentFrame();
-        previousFrame = g.previousFrame;
-        respawnFrame = g.respawnFrame;
-        frameOffset = g.frameOffset;
-        schedulerOverflow = g.schedulerOverflow;
-        currentAction = g.currentAction;
-        currentFrameFix = g.currentFrameFix;
-        inputs = g.macro.inputs;
-        frameFixes = g.macro.frameFixes;
+        auto& bot = Bot::get();
+        tps = bot.tps;
+        tpsEnabled = bot.tpsEnabled;
+        frame = Bot::getCurrentFrame();
+        previousFrame = bot.previousFrame;
+        respawnFrame = bot.respawnFrame;
+        frameOffset = bot.frameOffset;
+        schedulerOverflow = bot.schedulerOverflow;
+        currentAction = bot.currentAction;
+        currentFrameFix = bot.currentFrameFix;
+        inputs = bot.replay.inputs;
+        frameFixes = bot.replay.frameFixes;
     }
 
     void apply(PlayerObject* p1Obj, PlayerObject* p2Obj, PlayLayer* plObj) const {
@@ -126,42 +156,61 @@ struct PracticeCheckpointData {
             obj->setOpacity(0.0f);
         }
 
-        auto& g = Global::get();
-        if (g.tps != tps)
-            g.setTps(tps);
-        if (g.tpsEnabled != tpsEnabled)
-            g.setTpsEnabled(tpsEnabled);
+        auto& bot = Bot::get();
+        if (bot.tps != tps)
+            bot.setTps(tps);
+        if (bot.tpsEnabled != tpsEnabled)
+            bot.setTpsEnabled(tpsEnabled);
+        {
+            bool previousIgnore = bot.ignoreRecordAction;
+            bot.ignoreRecordAction = true;
+
+            bot.m_frameCount = frame;
+            bot.previousFrame = previousFrame;
+            bot.respawnFrame = respawnFrame;
+            bot.frameOffset = frameOffset;
+            bot.schedulerOverflow = schedulerOverflow;
+            bot.currentAction = currentAction;
+            bot.currentFrameFix = currentFrameFix;
+
+            if (bot.state == state::recording) {
+                bot.replay.inputs = inputs;
+                bot.replay.frameFixes = frameFixes;
+            }
+
+            bot.ignoreRecordAction = previousIgnore;
+        }
         GameToolbox::fast_srand(randomSeed);
     }
 
     void applyMacroState() const {
-        auto& g = Global::get();
-        bool previousIgnore = g.ignoreRecordAction;
-        g.ignoreRecordAction = true;
+        auto& bot = Bot::get();
+        bool previousIgnore = bot.ignoreRecordAction;
+        bot.ignoreRecordAction = true;
 
-        if (g.state == state::recording) {
-            g.macro.inputs = inputs;
-            g.macro.frameFixes = frameFixes;
+        bot.m_frameCount = frame;
+        bot.previousFrame = previousFrame;
+        bot.respawnFrame = respawnFrame;
+        bot.frameOffset = frameOffset;
+        bot.schedulerOverflow = schedulerOverflow;
+
+        if (bot.state == state::recording) {
+            bot.replay.inputs = inputs;
+            bot.replay.frameFixes = frameFixes;
         }
 
-        g.m_frameCount = frame;
-        g.previousFrame = previousFrame;
-        g.respawnFrame = respawnFrame;
-        g.frameOffset = frameOffset;
-        g.schedulerOverflow = schedulerOverflow;
-
         int targetFrame = frame - frameOffset;
-        g.currentAction = 0;
-        while (g.currentAction < g.macro.inputs.size() &&
-               g.macro.inputs[g.currentAction].frame < targetFrame)
-            g.currentAction++;
+        bot.currentAction = 0;
+        while (bot.currentAction < bot.replay.inputs.size() &&
+               bot.replay.inputs[bot.currentAction].frame < targetFrame)
+            bot.currentAction++;
 
-        g.currentFrameFix = 0;
-        while (g.currentFrameFix < g.macro.frameFixes.size() &&
-               g.macro.frameFixes[g.currentFrameFix].frame < targetFrame)
-            g.currentFrameFix++;
+        bot.currentFrameFix = 0;
+        while (bot.currentFrameFix < bot.replay.frameFixes.size() &&
+               bot.replay.frameFixes[bot.currentFrameFix].frame < targetFrame)
+            bot.currentFrameFix++;
 
-        g.ignoreRecordAction = previousIgnore;
+        bot.ignoreRecordAction = previousIgnore;
     }
 
     CheckpointData toGlobalCheckpoint() const {
@@ -174,6 +223,8 @@ struct PracticeCheckpointData {
         };
     }
 };
+
+} // namespace
 
 static std::deque<PracticeCheckpointData>& storedFrameStepperFrames() {
     static std::deque<PracticeCheckpointData> frames;
@@ -322,13 +373,13 @@ class $modify(FixPlayLayer, PlayLayer) {
             return;
 
         bool shouldFix = PracticeFix::shouldEnable();
-        auto& g = Global::get();
-        bool wasRecordingOrPlaying = g.state == state::recording || g.state == state::playing;
+        auto& bot = Bot::get();
+        bool wasRecordingOrPlaying = bot.state == state::recording || bot.state == state::playing;
         std::optional<PracticeCheckpointData> snapshot;
         if (auto* data = m_fields->findCheckpoint(checkpoint))
             snapshot = *data;
 
-        Macro::tryAutosave(m_level, checkpoint);
+        Bot::tryAutosave(m_level, checkpoint);
 
         if (shouldFix) {
             if (m_player1) m_player1->m_isDashing = false;
@@ -338,18 +389,16 @@ class $modify(FixPlayLayer, PlayLayer) {
         PlayLayer::loadFromCheckpoint(checkpoint);
         resetTPSBypassState();
 
-        if (snapshot) {
-            if (shouldFix)
-                snapshot->apply(m_player1, m_gameState.m_isDualMode ? m_player2 : nullptr, this);
-            if (wasRecordingOrPlaying)
-                snapshot->applyMacroState();
-        }
+        if (snapshot && shouldFix)
+            snapshot->apply(m_player1, m_gameState.m_isDualMode ? m_player2 : nullptr, this);
+        if (snapshot && wasRecordingOrPlaying)
+            snapshot->applyMacroState();
     }
 
     CheckpointObject* createCheckpoint() {
         auto* checkpoint = PlayLayer::createCheckpoint();
         if (!checkpoint) return checkpoint;
-        bool shouldSave = PracticeFix::shouldEnable() || Global::get().state == state::recording || Global::get().state == state::playing;
+        bool shouldSave = PracticeFix::shouldEnable() || Bot::get().state == state::recording || Bot::get().state == state::playing;
         if (shouldSave) {
             PracticeCheckpointData data(
                 checkpoint,
@@ -361,9 +410,9 @@ class $modify(FixPlayLayer, PlayLayer) {
             m_fields->removeCheckpoint(checkpoint);
             m_fields->m_checkpoints.push_back(data);
 
-            auto& g = Global::get();
-            if (g.state == state::recording)
-                g.checkpoints[checkpoint] = data.toGlobalCheckpoint();
+            auto& bot = Bot::get();
+            if (bot.state == state::recording)
+                bot.checkpoints[checkpoint] = data.toGlobalCheckpoint();
         }
         return checkpoint;
     }
@@ -371,7 +420,7 @@ class $modify(FixPlayLayer, PlayLayer) {
     void removeCheckpoint(CheckpointObject* checkpoint) {
         PlayLayer::removeCheckpoint(checkpoint);
         m_fields->removeCheckpoint(checkpoint);
-        Global::get().checkpoints.erase(checkpoint);
+        Bot::get().checkpoints.erase(checkpoint);
     }
 
     void updateAttempts() {
@@ -382,17 +431,16 @@ class $modify(FixPlayLayer, PlayLayer) {
     }
 
     void resetLevel() {
-        bool hadCheckpoints = m_checkpointArray->count() > 0;
-        bool shouldRestoreHeldButtons = PracticeFix::shouldEnable() && hadCheckpoints;
-        auto held = heldButtonState();
+    bool hadCheckpoints = m_checkpointArray->count() > 0;
+    bool shouldRestoreHeldButtons = PracticeFix::shouldEnable() && hadCheckpoints;
+    auto held = heldButtonState();
 
-        if (shouldRestoreHeldButtons && !held.valid) {
+        if (shouldRestoreHeldButtons && !held.valid)
             held.capture(this);
-        }
 
         if (!hadCheckpoints && !PracticeFix::isLoadingFrameStepperBackstep()) {
             m_fields->m_checkpoints.clear();
-            Global::get().checkpoints.clear();
+            Bot::get().checkpoints.clear();
             brokenPracticeObjects().clear();
             PracticeFix::clearStoredFrames();
         }
@@ -403,28 +451,8 @@ class $modify(FixPlayLayer, PlayLayer) {
                 m_queuedButtons.pop_back();
         }
 
-        if (shouldRestoreHeldButtons) {
-            auto queueIfChanged = [this](int button, bool down, bool player2) {
-                auto* player = player2 ? m_player2 : m_player1;
-                if (!player || player->m_holdingButtons[button] == down)
-                    return;
-                this->queueButton(button, down, player2, 0.0);
-            };
-
-            queueIfChanged(1, held.p1Holding, false);
-            if (m_isPlatformer) {
-                queueIfChanged(2, held.p1Left, false);
-                queueIfChanged(3, held.p1Right, false);
-            }
-
-            if (m_gameState.m_isDualMode && m_levelSettings->m_twoPlayerMode) {
-                queueIfChanged(1, held.p2Holding, true);
-                if (m_isPlatformer) {
-                    queueIfChanged(2, held.p2Left, true);
-                    queueIfChanged(3, held.p2Right, true);
-                }
-            }
-        }
+        if (shouldRestoreHeldButtons)
+            restoreHeldButtons(this, held);
 
         heldButtonState().valid = false;
     }

@@ -1,4 +1,11 @@
-#include "../includes.hpp"
+#pragma once
+
+#include <Geode/Geode.hpp>
+
+#include <filesystem>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 const std::vector<std::string> buttonNames = { "hold_click", "release_click", "hold_left", "release_left", "hold_right", "release_right" };
 

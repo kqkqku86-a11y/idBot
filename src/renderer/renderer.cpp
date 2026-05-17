@@ -1,5 +1,5 @@
-#include "../includes.hpp"
-#include "../ui/game_ui.hpp"
+#include "../core/bot.hpp"
+#include "../ui/game/game_ui.hpp"
 #include "DSPRecorder.hpp"
 
 #include <Geode/modify/CCCircleWave.hpp>
@@ -40,7 +40,7 @@ class $modify(CCParticleSystem) {
 class $modify(CCCircleWave) {
     static CCCircleWave* create(float v1, float v2, float v3, bool v4, bool v5) {
         CCCircleWave* ret = CCCircleWave::create(v1, v2, v3, v4, v5);
-        if (!Global::get().renderer.recording ||
+        if (!Bot::get().renderer.recording ||
             !PlayLayer::get()->m_levelEndAnimationStarted) return ret;
         if (Mod::get()->getSavedValue<bool>("render_hide_levelcomplete"))
             ret->setVisible(false);
@@ -52,7 +52,7 @@ class $modify(PlayLayer) {
     void showCompleteText() {
         PlayLayer::showCompleteText();
 
-        if (!Global::get().renderer.recording) return;
+        if (!Bot::get().renderer.recording) return;
 
         if (m_levelEndAnimationStarted && Mod::get()->getSavedValue<bool>("render_hide_levelcomplete")) {
                 const char* spriteName = m_isPracticeMode ?
@@ -71,7 +71,7 @@ class $modify(EndLevelLayer) {
     void customSetup() {
         EndLevelLayer::customSetup();
         if (!PlayLayer::get()) return;
-        if (Global::get().renderer.recording &&
+        if (Bot::get().renderer.recording &&
             PlayLayer::get()->m_levelEndAnimationStarted &&
             Mod::get()->getSavedValue<bool>("render_hide_endscreen")) {
             Loader::get()->queueInMainThread([this] { setVisible(false); });
@@ -81,14 +81,14 @@ class $modify(EndLevelLayer) {
 
 class $modify(FMODAudioEngine) {
     int playEffect(gd::string path, float speed, float p2, float volume) {
-        if (path == "explode_11.ogg" && Global::get().renderer.recording) return 0;
+        if (path == "explode_11.ogg" && Bot::get().renderer.recording) return 0;
         return FMODAudioEngine::playEffect(path, speed, p2, volume);
     }
 };
 
 // class $modify(InternalRecorderSLHook, ShaderLayer) {
 //     void visit() {
-//         if (Global::get().renderer.recording) {
+//         if (Bot::get().renderer.recording) {
 //             setScaleY(-1);
 //             ShaderLayer::visit();
 //             return setScaleY(1);
@@ -99,7 +99,7 @@ class $modify(FMODAudioEngine) {
 
 class $modify(CCScheduler) {
     void update(float dt) {
-        Renderer& r = Global::get().renderer;
+        Renderer& r = Bot::get().renderer;
         if (!r.recording) return CCScheduler::update(dt);
 
         r.applyWinSize();
@@ -107,7 +107,7 @@ class $modify(CCScheduler) {
         float fps = static_cast<float>(r.fps);
         if (fps < 1) fps = 1;
 
-        float newDt = (1.f / fps) * (fps / static_cast<float>(Global::getTPS()));
+        float newDt = (1.f / fps) * (fps / static_cast<float>(Bot::getTPS()));
 
         CCScheduler::update(newDt);
 
@@ -117,7 +117,7 @@ class $modify(CCScheduler) {
 
 class $modify(GJBaseGameLayer) {
     void update(float dt) {
-        Renderer& r = Global::get().renderer;
+        Renderer& r = Bot::get().renderer;
 
         if (!r.recording || m_gameState.m_currentProgress <= 0)
             return GJBaseGameLayer::update(dt);
@@ -160,17 +160,17 @@ class $modify(GJBaseGameLayer) {
 
 class $modify(RendererPlayLayerHook, PlayLayer) {
     void onQuit() {
-        if (Global::get().renderer.recording) Global::get().renderer.stop();
+        if (Bot::get().renderer.recording) Bot::get().renderer.stop();
         PlayLayer::onQuit();
     }
 
     void levelComplete() {
         PlayLayer::levelComplete();
-        Global::get().renderer.levelFinished = true;
+        Bot::get().renderer.levelFinished = true;
     }
 
     void resetLevel() {
-        auto& r = Global::get().renderer;
+        auto& r = Bot::get().renderer;
         if (r.recording) {
             r.levelFinished = false;
             r.timeAfter     = 0.f;
@@ -182,9 +182,9 @@ class $modify(RendererPlayLayerHook, PlayLayer) {
 bool Renderer::shouldUseAPI() {
 #ifdef GEODE_IS_WINDOWS
     std::filesystem::path ffmpegSettingPath =
-        Mod::get()->getSettingValue<std::filesystem::path>("ffmpeg_path");
+        Settings::get().value<std::filesystem::path>("ffmpeg_path");
     bool foundExe = std::filesystem::exists(ffmpegSettingPath) &&
-        geode::utils::string::pathToString(ffmpegSettingPath.filename()) == "ffmpeg.exe";
+        geode::utils::string::pathToString(ffmpegSettingPath.filename()) == "ffmpebot.exe";
     if (foundExe)
         return false;
 #endif
@@ -192,7 +192,7 @@ bool Renderer::shouldUseAPI() {
 }
 
 bool Renderer::toggle() {
-    auto& g = Global::get();
+    auto& bot = Bot::get();
     auto gm = GameManager::sharedState();
     auto cbf = Loader::get()->getLoadedMod("syzzi.click_between_frames");
     if (cbf && !cbf->getSettingValue<bool>("soft-toggle")) {
@@ -218,23 +218,23 @@ bool Renderer::toggle() {
 
 #ifdef GEODE_IS_WINDOWS
     std::filesystem::path ffmpegSettingPath =
-        Mod::get()->getSettingValue<std::filesystem::path>("ffmpeg_path");
+        Settings::get().value<std::filesystem::path>("ffmpeg_path");
     bool foundExe = std::filesystem::exists(ffmpegSettingPath) &&
-        geode::utils::string::pathToString(ffmpegSettingPath.filename()) == "ffmpeg.exe";
+        geode::utils::string::pathToString(ffmpegSettingPath.filename()) == "ffmpebot.exe";
 #endif
 
-    if (g.renderer.recording) {
-        g.renderer.stop();
+    if (bot.renderer.recording) {
+        bot.renderer.stop();
     } else {
 #ifdef GEODE_IS_WINDOWS
         if (!foundApi && !foundExe) {
             geode::createQuickPopup("Error",
                 "<cl>FFmpeg</c> not found. Either install FFmpeg API, or set the path "
-                "to ffmpeg.exe in mod settings.\nOpen download link?",
+                "to ffmpebot.exe in mod settings.\nOpen download link?",
                 "Cancel", "Yes", [](auto, bool btn2) {
                     if (btn2) {
                         FLAlertLayer::create("Info",
-                            "Unzip the downloaded file and look for <cl>ffmpeg.exe</c> "
+                            "Unzip the downloaded file and look for <cl>ffmpebot.exe</c> "
                             "in the 'bin' folder.", "OK")->show();
                         utils::web::openLinkInBrowser(
                             "https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-essentials.7z");
@@ -243,7 +243,7 @@ bool Renderer::toggle() {
             return false;
         }
         if (!foundApi)
-            g.renderer.ffmpegPath = geode::utils::string::pathToString(ffmpegSettingPath);
+            bot.renderer.ffmpegPath = geode::utils::string::pathToString(ffmpegSettingPath);
 #else
         if (!foundApi) {
             geode::createQuickPopup(
@@ -269,7 +269,7 @@ bool Renderer::toggle() {
         std::filesystem::path renderFolder = Mod::get()->getSaveDir() / "renders";
 #else
         std::filesystem::path renderFolder =
-            Mod::get()->getSettingValue<std::filesystem::path>("render_folder");
+            Settings::get().value<std::filesystem::path>("render_folder");
 #endif
 
         if (!std::filesystem::exists(renderFolder)) {
@@ -280,8 +280,8 @@ bool Renderer::toggle() {
             }
         }
 
-        g.renderer.usingApi = foundApi;
-        g.renderer.start();
+        bot.renderer.usingApi = foundApi;
+        bot.renderer.start();
     }
 
     Interface::updateLabels();
@@ -354,7 +354,7 @@ void Renderer::start() {
     path = geode::utils::string::pathToString(mod->getSaveDir() / "renders" / filename);
 #else
     path = geode::utils::string::pathToString(
-        mod->getSettingValue<std::filesystem::path>("render_folder") / filename);
+        Settings::get().value<std::filesystem::path>("render_folder") / filename);
 #endif
 
     width  = geode::utils::numFromString<int>(
@@ -399,10 +399,10 @@ void Renderer::start() {
     DSPRecorder::get()->start();
 
     if (!pl->m_levelEndAnimationStarted && pl->m_isPaused)
-        Global::get().restart = true;
+        Bot::get().restart = true;
 
-    if (Global::get().state != state::playing && !Global::get().macro.inputs.empty())
-        Macro::togglePlaying();
+    if (Bot::get().state != state::playing && !Bot::get().replay.inputs.empty())
+        Bot::togglePlaying();
 
     if (!mod->setSavedValue("first_render_", true)) {
         FLAlertLayer::create("Warning",

@@ -1,4 +1,4 @@
-#include "../includes.hpp"
+#include "../core/bot.hpp"
 #include "../practice_fixes/practice_fixes.hpp"
 
 #include <Geode/modify/CCParticleSystem.hpp>
@@ -8,15 +8,15 @@ class $modify(FrameStepperPlayLayer, PlayLayer) {
     void setupHasCompleted() {
         PlayLayer::setupHasCompleted();
 
-        if (Global::get().frameStepper)
-            Global::toggleFrameStepper();
+        if (Bot::get().frameStepper)
+            Bot::toggleFrameStepper();
     }
 
     void resetLevel() {
         if (!PracticeFix::isLoadingFrameStepperBackstep())
             PracticeFix::clearStoredFrames();
         PlayLayer::resetLevel();
-        if (Global::get().frameStepper && !PracticeFix::isLoadingFrameStepperBackstep())
+        if (Bot::get().frameStepper && !PracticeFix::isLoadingFrameStepperBackstep())
             PracticeFix::saveFrameStepperFrame();
     }
 
@@ -28,12 +28,12 @@ class $modify(FrameStepperPlayLayer, PlayLayer) {
 
 class $modify(FrameStepperParticles, CCParticleSystem) {
     void update(float dt) override {
-        auto& g = Global::get();
-        if (!PlayLayer::get() || !g.frameStepper)
+        auto& bot = Bot::get();
+        if (!PlayLayer::get() || !bot.frameStepper)
             return CCParticleSystem::update(dt);
 
-        if (g.stepFrameParticle > 0) {
-            g.stepFrameParticle--;
+        if (bot.stepFrameParticle > 0) {
+            bot.stepFrameParticle--;
             return CCParticleSystem::update(dt);
         }
     }

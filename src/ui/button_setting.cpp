@@ -1,5 +1,5 @@
-#include "../includes.hpp"
-#include "record_layer.hpp"
+#include "../core/bot.hpp"
+#include "layers/record_layer.hpp"
 
 #include <Geode/loader/Mod.hpp>
 #include <Geode/loader/SettingV3.hpp>
@@ -60,8 +60,8 @@ class MyButtonSettingNodeV3 : public SettingNodeV3 {
                 typeinfo_cast<FLAlertLayer *>(children->lastObject()))
             layer->keyBackClicked();
 
-        static_cast<RecordLayer*>(Global::get().layer)->openMenu(
-            Mod::get()->getSettingValue<bool>("open_menu_instant"));
+        static_cast<RecordLayer*>(Bot::get().layer)->openMenu(
+            Settings::get().value<bool>("open_menu_instant"));
     }
 
     void onCommit() override {}

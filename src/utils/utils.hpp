@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Geode/Geode.hpp>
+
 class Utils {
 public:
     /// @brief Get the creation time of the macro file
@@ -17,4 +18,12 @@ public:
 
     /// @brief Get PauseLayer from the scene
     static PauseLayer* getPauseLayer();
+
+    /// @brief Sets text input enabled state
+    static void setTextInputEnabled(geode::TextInput* input, 
+        bool enabled, 
+        GLubyte enabledBg = 90,
+        GLubyte disabledBg = 30, 
+        GLubyte enabledText = 255, 
+        GLubyte disabledText = 100);
 };

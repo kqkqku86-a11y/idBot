@@ -1,26 +1,20 @@
 // practice_fixes.hpp
 #pragma once
-#include "../includes.hpp"
-#include "../global.hpp"
-#include "../macro.hpp"
+
+#include "../core/bot.hpp"
 #include "checkpoint.hpp"
 #include <Geode/modify/PlayLayer.hpp>
-
-using namespace geode::prelude;
 
 class PracticeFix {
   public:
     static bool shouldEnable() {
-        auto& g = Global::get();
+        auto& bot = Bot::get();
         auto* pl = PlayLayer::get();
 
-        if (!pl)
+        if (!pl || !pl->m_isPracticeMode)
             return false;
 
-        if (!pl->m_isPracticeMode)
-            return false;
-
-        return g.alwaysPracticeFixes || g.state == state::recording || g.state == state::playing;
+        return bot.alwaysPracticeFixes || bot.state == state::recording || bot.state == state::playing;
     }
 
     static void clearStoredFrames();
