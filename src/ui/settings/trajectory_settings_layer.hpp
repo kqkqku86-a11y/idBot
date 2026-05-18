@@ -86,6 +86,7 @@ class TrajectorySettingsLayer : public geode::Popup, public TextInputDelegate {
             CCMenuItemExt::createSpriteExtra(color2, [this](CCMenuItemSpriteExtra* sender) {
                 TrajectorySettingsLayer::openColorPicker(sender);
             });
+        colorButton->setTag(2);
         colorButton->setPosition({m_size.width - 68, 109});
         m_buttonMenu->addChild(colorButton);
 
@@ -130,18 +131,24 @@ class TrajectorySettingsLayer : public geode::Popup, public TextInputDelegate {
     }
 
     void openColorPicker(CCObject* obj) {
-        ColorChannelSprite* color = static_cast<CCNode*>(obj)->getTag() == 1 ? color1 : color2;
+        bool primary = static_cast<CCNode*>(obj)->getTag() == 1;
+        ColorChannelSprite* color = primary ? color1 : color2;
 
         ColorPickPopup* popup = ColorPickPopup::create(color->getColor());
         popup->setColorTarget(color);
-        popup->setCallback([this, color](const cocos2d::ccColor4B& newColor) {
+        popup->setCallback([this, primary, color](const cocos2d::ccColor4B& newColor) {
             color->setColor(ccc3(newColor.r, newColor.g, newColor.b));
-            ShowTrajectory::get().color1 = ccColor4FFromccColor4B(newColor);
+            auto converted = ccColor4FFromccColor4B(newColor);
+            if (primary) {
+                ShowTrajectory::get().color1 = converted;
+            } else {
+                ShowTrajectory::get().color2 = converted;
+            }
             ShowTrajectory::get().updateMergedColor();
 
             Mod::get()->setSavedValue(
-                "trajectory_color1",
-                ShowTrajectory::ccc3BFromccc4F(ccColor4FFromccColor4B(newColor)));
+                primary ? "trajectory_color1" : "trajectory_color2",
+                ShowTrajectory::ccc3BFromccc4F(converted));
         });
 
         popup->show();

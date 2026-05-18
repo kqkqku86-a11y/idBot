@@ -27,6 +27,8 @@ public:
         bool applyReplayInputs = true;
         bool draw = true;
         int maxLength = 10'000'000;
+        cocos2d::CCDrawNode* drawNode = nullptr;
+        float drawWidth = 0.f;
     };
 
     struct PredictionResult {
@@ -37,6 +39,19 @@ public:
         bool player1 = true;
         bool holding = false;
         int score = 0;
+    };
+
+    struct BranchJob {
+        bool player1 = true;
+        int mode = 0;
+        bool simulateBothPlayers = false;
+    };
+
+    struct BranchNodeState {
+        TrajectoryNode* node = nullptr;
+        bool player1 = true;
+        cocos2d::CCPoint anchor = {};
+        bool hasAnchor = false;
     };
 
     enum Mode : int {
@@ -159,5 +174,10 @@ public:
 
     std::vector<cocos2d::CCPoint> player1Trajectory;
     std::vector<cocos2d::CCPoint> player2Trajectory;
+
+    std::unordered_map<int, BranchNodeState> branchNodes;
+    std::vector<BranchJob> branchJobs;
+    size_t nextBranchJob = 0;
+    uint64_t branchSignature = 0;
 
 };

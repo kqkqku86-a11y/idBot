@@ -9,6 +9,9 @@ struct PassStats {
     int hazardQueued = 0;
     int effectCandidates = 0;
     int obbChecks = 0;
+    int spatialQueries = 0;
+    int spatialCandidates = 0;
+    int maxSpatialCandidates = 0;
     int spawnVisited = 0;
     int spawnCandidates = 0;
     int spawnTriggered = 0;
@@ -40,5 +43,13 @@ void teleportPlayer(GJBaseGameLayer* layer, TeleportPortalObject* object, Player
 bool activatePortal(GJBaseGameLayer* layer, PlayerObject* player, EffectGameObject* portal);
 void triggerObject(EffectGameObject* object, GJBaseGameLayer* layer, PlayerObject* player);
 void checkSpawnObjects(GJBaseGameLayer* layer, PlayerObject* player);
+int checkTrajectoryCollisions(
+    GJBaseGameLayer* layer,
+    PlayerObject* player,
+    cocos2d::CCRect const& previousRect,
+    cocos2d::CCRect const& currentRect,
+    float dt,
+    bool ignoreDamage
+);
 void collisionCheckObjects(GJBaseGameLayer* layer, PlayerObject* player, gd::vector<GameObject*>* objects, int objectCount, float dt);
 }
