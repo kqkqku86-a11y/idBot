@@ -83,7 +83,6 @@ uint64_t trajectoryRefreshSignature(Bot const& bot, PlayLayer* pl) {
 
     auto& trajectory = ShowTrajectory::get();
     mix(reinterpret_cast<uintptr_t>(pl));
-    mix(static_cast<uint64_t>(Bot::getCurrentFrame()));
     mix(static_cast<uint64_t>(pl->m_gameState.m_currentProgress));
     mixFloat(pl->m_gameState.m_timeWarp);
     mixBool(pl->m_gameState.m_isDualMode);
@@ -123,20 +122,20 @@ void applyReplayInputsForPrediction(
     bool enabled
 ) {
     auto& bot = Bot::get();
-    if (!enabled || bot.state != state::playing || !pl)
+    if (!enabled || !pl)
         return;
 
     auto const& inputs = bot.replay.inputs;
     while (inputIndex < inputs.size() && inputs[inputIndex].frame <= frame) {
         auto const& input = inputs[inputIndex];
-        bool player2 = !input.player2;
-        PlayerObject* player = player2 ? t.fakePlayer2 : t.fakePlayer1;
-        PlayerObject* other = player2 ? t.fakePlayer1 : t.fakePlayer2;
+        PlayerObject* player = input.player2 ? t.fakePlayer2 : t.fakePlayer1;
+        PlayerObject* other = input.player2 ? t.fakePlayer1 : t.fakePlayer2;
 
         if (static_cast<int>(input.frame) != bot.respawnFrame) {
             applyReplayButton(player, input);
-            if (simulateBothPlayers && pl->m_gameState.m_isDualMode)
+            if (simulateBothPlayers && pl->m_gameState.m_isDualMode) {
                 applyReplayButton(other, input);
+            }
         }
 
         inputIndex++;
@@ -145,6 +144,32 @@ void applyReplayInputsForPrediction(
 
 bool shouldLogSlowTrajectory(int64_t totalMs) {
     return totalMs >= 50;
+}
+
+int64_t g_lastTrajectoryRefreshMs = 0;
+int g_refreshIntervalFrames = 1;
+
+int adaptiveLengthCap(int requestedLength) {
+    int cap = requestedLength;
+    if (g_lastTrajectoryRefreshMs >= 20)
+        cap = std::min(cap, 80);
+    else if (g_lastTrajectoryRefreshMs >= 12)
+        cap = std::min(cap, 120);
+    else if (g_lastTrajectoryRefreshMs >= 8)
+        cap = std::min(cap, 180);
+    return std::max(cap, 0);
+}
+
+void storeRefreshCost(int64_t ms) {
+    g_lastTrajectoryRefreshMs = ms;
+    if (ms >= 24)
+        g_refreshIntervalFrames = 4;
+    else if (ms >= 16)
+        g_refreshIntervalFrames = 3;
+    else if (ms >= 10)
+        g_refreshIntervalFrames = 2;
+    else
+        g_refreshIntervalFrames = 1;
 }
 }
 
@@ -171,6 +196,8 @@ void ShowTrajectory::trajectoryOff() {
 void ShowTrajectory::refreshIfNeeded() {
     static bool cachedSignatureValid = false;
     static uint64_t cachedSignature = 0;
+    static int s_lastRefreshFrame = -1;
+    static int s_nextAllowedRefreshFrame = -1;
 
     auto& bot = Bot::get();
     if (!bot.showTrajectory) {
@@ -187,6 +214,12 @@ void ShowTrajectory::refreshIfNeeded() {
         return;
     }
 
+    int frameNow = Bot::getCurrentFrame();
+    if (frameNow == s_lastRefreshFrame)
+        return;
+    if (s_nextAllowedRefreshFrame >= 0 && frameNow < s_nextAllowedRefreshFrame)
+        return;
+
     auto* node = trajectoryNode();
     uint64_t signature = trajectoryRefreshSignature(bot, pl);
     if (cachedSignatureValid && cachedSignature == signature && node && node->isVisible())
@@ -194,6 +227,8 @@ void ShowTrajectory::refreshIfNeeded() {
 
     cachedSignature = signature;
     cachedSignatureValid = true;
+    s_lastRefreshFrame = frameNow;
+    s_nextAllowedRefreshFrame = frameNow + std::max(g_refreshIntervalFrames, 1);
     updateTrajectory(pl);
 }
 
@@ -218,26 +253,28 @@ bool ShowTrajectory::realPlayerHasActivated(PlayerObject* player, EnhancedGameOb
     if (!player || !object)
         return false;
 
-    PlayerObject* realPlayer = player;
-    auto* pl = PlayLayer::get();
-    if (pl && player == t.fakePlayer1)
-        realPlayer = pl->m_player1;
-    else if (pl && player == t.fakePlayer2)
-        realPlayer = pl->m_player2;
+    auto hasBeenActivatedByPlayer = [](PlayerObject* p, EnhancedGameObject* obj) -> bool {
+        if (!p || !obj)
+            return false;
 
+        if ((!p->m_isPlatformer && obj->m_isMultiActivate) || (p->m_isPlatformer && obj->m_isNoMultiActivate))
+            return false;
+
+        return !p->m_isSecondPlayer ? obj->m_activatedByPlayer1 : obj->m_activatedByPlayer2;
+    };
+
+    if (!ShowTrajectory::isFakePlayer(player))
+        return hasBeenActivatedByPlayer(player, object);
+
+    auto* pl = PlayLayer::get();
+    if (!pl)
+        return false;
+
+    PlayerObject* realPlayer = player == t.fakePlayer1 ? pl->m_player1 : pl->m_player2;
     if (!realPlayer)
         return false;
 
-    bool platformerActivated = !realPlayer->m_isPlatformer
-        ? object->m_isMultiActivate
-        : object->m_isNoMultiActivate;
-    if (platformerActivated)
-        return false;
-
-    if (!realPlayer->m_isSecondPlayer)
-        return object->m_activatedByPlayer1;
-
-    return object->m_activatedByPlayer2;
+    return hasBeenActivatedByPlayer(realPlayer, object);
 }
 
 void ShowTrajectory::rememberActivated(PlayerObject* player, EnhancedGameObject* object) {
@@ -374,15 +411,21 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
 
         createTrajectory(pl, true, Hold, simulateBoth, baseGameState, baseEffectStatePtr, {});
         p1BranchCount++;
+        createTrajectory(pl, true, Swift, simulateBoth, baseGameState, baseEffectStatePtr, {});
+        p1BranchCount++;
         createTrajectory(pl, true, Release, simulateBoth, baseGameState, baseEffectStatePtr, {});
         p1BranchCount++;
 
         if (pl->m_levelSettings->m_platformerMode && platformerBothSides) {
             createTrajectory(pl, true, Hold | Left, simulateBoth, baseGameState, baseEffectStatePtr, {});
             p1BranchCount++;
+            createTrajectory(pl, true, Swift | Left, simulateBoth, baseGameState, baseEffectStatePtr, {});
+            p1BranchCount++;
             createTrajectory(pl, true, Release | Left, simulateBoth, baseGameState, baseEffectStatePtr, {});
             p1BranchCount++;
             createTrajectory(pl, true, Hold | Right, simulateBoth, baseGameState, baseEffectStatePtr, {});
+            p1BranchCount++;
+            createTrajectory(pl, true, Swift | Right, simulateBoth, baseGameState, baseEffectStatePtr, {});
             p1BranchCount++;
             createTrajectory(pl, true, Release | Right, simulateBoth, baseGameState, baseEffectStatePtr, {});
             p1BranchCount++;
@@ -396,15 +439,21 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
         if (ensureFakePlayer(pl, false)) {
             createTrajectory(pl, false, Hold, false, baseGameState, baseEffectStatePtr, {});
             p2BranchCount++;
+            createTrajectory(pl, false, Swift, false, baseGameState, baseEffectStatePtr, {});
+            p2BranchCount++;
             createTrajectory(pl, false, Release, false, baseGameState, baseEffectStatePtr, {});
             p2BranchCount++;
 
             if (pl->m_levelSettings->m_platformerMode && platformerBothSides) {
                 createTrajectory(pl, false, Hold | Left, false, baseGameState, baseEffectStatePtr, {});
                 p2BranchCount++;
+                createTrajectory(pl, false, Swift | Left, false, baseGameState, baseEffectStatePtr, {});
+                p2BranchCount++;
                 createTrajectory(pl, false, Release | Left, false, baseGameState, baseEffectStatePtr, {});
                 p2BranchCount++;
                 createTrajectory(pl, false, Hold | Right, false, baseGameState, baseEffectStatePtr, {});
+                p2BranchCount++;
+                createTrajectory(pl, false, Swift | Right, false, baseGameState, baseEffectStatePtr, {});
                 p2BranchCount++;
                 createTrajectory(pl, false, Release | Right, false, baseGameState, baseEffectStatePtr, {});
                 p2BranchCount++;
@@ -420,6 +469,7 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
     hideFakePlayer(t.fakePlayer1);
     hideFakePlayer(t.fakePlayer2);
     auto totalMs = totalTimer.elapsed<>();
+    storeRefreshCost(totalMs);
     if (shouldLogSlowTrajectory(totalMs)) {
         auto passStats = xdbot::trajectory_physics::currentPassStats();
         log::info(
@@ -648,6 +698,7 @@ ShowTrajectory::PredictionResult ShowTrajectory::createTrajectory(
     PlayerObject* realPlayer = player1 ? pl->m_player1 : pl->m_player2;
     PlayerObject* otherFake = player1 ? t.fakePlayer2 : t.fakePlayer1;
     PlayerObject* otherReal = player1 ? pl->m_player2 : pl->m_player1;
+    auto& bot = Bot::get();
     if (!fakePlayer || !realPlayer)
         return result;
 
@@ -677,13 +728,20 @@ ShowTrajectory::PredictionResult ShowTrajectory::createTrajectory(
     bool stopMain = false;
     bool stopOther = !simulateBothPlayers || !otherFake;
     int predictionLength = std::min(std::max(t.length, 0), std::max(config.maxLength, 0));
-    size_t replayInputIndex = Bot::get().currentAction;
+    predictionLength = adaptiveLengthCap(predictionLength);
+    PredictionConfig iterConfig = config;
+    size_t replayInputIndex = 0;
+    if (config.applyReplayInputs && bot.state == state::playing) {
+        uint64_t startFrame = static_cast<uint64_t>(Bot::getCurrentFrame());
+        replayInputIndex = bot.currentAction;
+    }
     for (int i = 0; i < predictionLength; i++) {
         if (i >= predictionLength - 40)
             color.a = (predictionLength - i) / 40.f;
         otherColor.a = color.a;
 
-        uint64_t frame = static_cast<uint64_t>(Bot::getCurrentFrame()) + static_cast<uint64_t>(i);
+        uint64_t frame =
+            static_cast<uint64_t>(Bot::getCurrentFrame()) + static_cast<uint64_t>(i);
         applyReplayInputsForPrediction(
             pl,
             replayInputIndex,
@@ -696,11 +754,11 @@ ShowTrajectory::PredictionResult ShowTrajectory::createTrajectory(
             stopOther = true;
 
         if (!stopMain) {
-            stopMain = iterate(pl, fakePlayer, mode, color, config);
+            stopMain = iterate(pl, fakePlayer, mode, color, iterConfig);
             result.score++;
         }
         if (!stopOther)
-            stopOther = iterate(pl, otherFake, mode, otherColor, config);
+            stopOther = iterate(pl, otherFake, mode, otherColor, iterConfig);
 
         if (stopMain && stopOther)
             break;
@@ -1018,6 +1076,24 @@ class $modify(PlayerObject) {
     void update(float dt) {
         PlayerObject::update(dt);
         t.delta = dt;
+
+        if (ShowTrajectory::isFakePlayer(this))
+            return;
+
+        static float s_prevScaleP1 = -1.f;
+        static float s_prevScaleP2 = -1.f;
+        float& prevScale = this->m_isSecondPlayer ? s_prevScaleP2 : s_prevScaleP1;
+        float currentScale = this->getScale();
+
+        if (prevScale < 0.f) {
+            prevScale = currentScale;
+            return;
+        }
+
+        if (std::abs(prevScale - currentScale) > 0.0001f) {
+            prevScale = currentScale;
+            ShowTrajectory::refreshIfNeeded();
+        }
     }
 
     void playSpiderDashEffect(cocos2d::CCPoint p0, cocos2d::CCPoint p1) {
@@ -1070,12 +1146,6 @@ class $modify(PlayerObject) {
             PlayerObject::togglePlayerScale(enable, noEffects);
             ShowTrajectory::refreshIfNeeded();
         }
-    }
-
-    void updatePlayerScale() {
-        PlayerObject::updatePlayerScale();
-        if (!ShowTrajectory::isFakePlayer(this))
-            ShowTrajectory::refreshIfNeeded();
     }
 
     void flipGravity(bool flip, bool noEffects) {

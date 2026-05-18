@@ -30,6 +30,8 @@ class Bot {
         static Bot instance;
         return instance;
     }
+    
+    static bool isBootstrapping();
 
     static bool hasIncompatibleMods();
 
@@ -76,7 +78,6 @@ class Bot {
     static void toggleFrameStepper();
 
     Mod* mod = geode::Mod::get();
-    Settings& settings = Settings::get();
     geode::Popup* layer = nullptr;
 
     BotUpdater updater;
@@ -150,7 +151,7 @@ class Bot {
             previousTpsEnabled = tpsEnabled;
         tpsEnabled = enabled;
 
-        settings.save("macro_tps_enabled", enabled);
+        mod->setSavedValue("macro_tps_enabled", enabled);
 
         for (auto& cb : onTpsEnabledChanged)
             cb(enabled);
@@ -170,7 +171,7 @@ class Bot {
             previousTps = tps;
         tps = newTps;
 
-        settings.save("macro_tps", static_cast<double>(newTps));
+        mod->setSavedValue("macro_tps", static_cast<double>(newTps));
 
         for (auto& cb : onTpsChanged)
             cb(static_cast<double>(newTps));

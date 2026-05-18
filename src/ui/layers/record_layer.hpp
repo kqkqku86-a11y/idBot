@@ -133,7 +133,7 @@ class RecordLayer : public geode::Popup, public TextInputDelegate {
 
     void openMenu2(CCObject *) {
         RecordLayer::openMenu(
-            Settings::get().value<bool>("open_menu_instant"));
+            Mod::get()->getSettingValue<bool>("open_menu_instant"));
     }
 
     void moreSettings(CCObject *) { geode::openSettingsPopup(mod, false); }

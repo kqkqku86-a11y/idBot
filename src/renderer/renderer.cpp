@@ -202,7 +202,7 @@ class $modify(RendererPlayLayerHook, PlayLayer) {
 bool Renderer::shouldUseAPI() {
 #ifdef GEODE_IS_WINDOWS
     std::filesystem::path ffmpegSettingPath =
-        Settings::get().value<std::filesystem::path>("ffmpeg_path");
+        Mod::get()->getSettingValue<std::filesystem::path>("ffmpeg_path");
     bool foundExe = std::filesystem::exists(ffmpegSettingPath) &&
         geode::utils::string::pathToString(ffmpegSettingPath.filename()) == "ffmpebot.exe";
     if (foundExe)
@@ -238,7 +238,7 @@ bool Renderer::toggle() {
 
 #ifdef GEODE_IS_WINDOWS
     std::filesystem::path ffmpegSettingPath =
-        Settings::get().value<std::filesystem::path>("ffmpeg_path");
+        Mod::get()->getSettingValue<std::filesystem::path>("ffmpeg_path");
     bool foundExe = std::filesystem::exists(ffmpegSettingPath) &&
         geode::utils::string::pathToString(ffmpegSettingPath.filename()) == "ffmpebot.exe";
 #endif
@@ -289,7 +289,7 @@ bool Renderer::toggle() {
         std::filesystem::path renderFolder = Mod::get()->getSaveDir() / "renders";
 #else
         std::filesystem::path renderFolder =
-            Settings::get().value<std::filesystem::path>("render_folder");
+            Mod::get()->getSettingValue<std::filesystem::path>("render_folder");
 #endif
 
         if (!std::filesystem::exists(renderFolder)) {
@@ -374,7 +374,7 @@ void Renderer::start() {
     path = geode::utils::string::pathToString(mod->getSaveDir() / "renders" / filename);
 #else
     path = geode::utils::string::pathToString(
-        Settings::get().value<std::filesystem::path>("render_folder") / filename);
+        Mod::get()->getSettingValue<std::filesystem::path>("render_folder") / filename);
 #endif
 
     width  = geode::utils::numFromString<int>(

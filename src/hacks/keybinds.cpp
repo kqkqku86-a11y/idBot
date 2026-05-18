@@ -32,8 +32,8 @@ void handleKeybind(std::string_view id, bool down, bool repeat, double time) {
     auto& bot = Bot::get();
 
     if (!down ||
-        (LevelEditorLayer::get() && !bot.settings.value<bool>("editor_keybinds")) ||
-        bot.settings.value<bool>("disable_keybinds")) {
+        (LevelEditorLayer::get() && !bot.mod->getSettingValue<bool>("editor_keybinds")) ||
+        bot.mod->getSettingValue<bool>("disable_keybinds")) {
         return;
     }
 
@@ -42,7 +42,7 @@ void handleKeybind(std::string_view id, bool down, bool repeat, double time) {
             return;
     }
 
-    if (bot.state != state::recording && bot.settings.value<bool>("recording_only_keybinds"))
+    if (bot.state != state::recording && bot.mod->getSettingValue<bool>("recording_only_keybinds"))
         return;
 
     static std::unordered_map<std::string_view, geode::Function<void()>> handlers = [] {
@@ -53,7 +53,7 @@ void handleKeybind(std::string_view id, bool down, bool repeat, double time) {
             if (bot.layer) {
                 static_cast<RecordLayer*>(bot.layer)->onClose(nullptr);
             } else {
-                static_cast<RecordLayer*>(bot.layer)->openMenu(bot.settings.value<bool>("open_menu_instant"));
+                static_cast<RecordLayer*>(bot.layer)->openMenu(bot.mod->getSettingValue<bool>("open_menu_instant"));
             }
         };
 

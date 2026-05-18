@@ -98,9 +98,10 @@ const std::vector<std::vector<RecordSetting>> settings{
      {"Enable Auto Saving:", "macro_auto_save", InputType::Autosave}}};
 
 $execute {
-    auto& settings = Settings::get();
-
-    settings.listen<int64_t>("frame_offset", +[](int64_t value) {
+    auto* mod = Mod::get();
+    geode::listenForSettingChanges<int64_t>("frame_offset", +[](int64_t value) {
+        if (Bot::isBootstrapping())
+            return;
         auto& bot = Bot::get();
         bot.frameOffset = value;
 
@@ -112,9 +113,11 @@ $execute {
             static_cast<RecordLayer*>(bot.layer)->warningLabel->setVisible(value != 0);
             static_cast<RecordLayer*>(bot.layer)->warningSprite->setVisible(value != 0);
         }
-    });
+    }, mod);
 
-    settings.listen<cocos2d::ccColor3B>("background_color", +[](cocos2d::ccColor3B) {
+    geode::listenForSettingChanges<cocos2d::ccColor3B>("background_color", +[](cocos2d::ccColor3B) {
+        if (Bot::isBootstrapping())
+            return;
         auto& bot = Bot::get();
         if (!bot.layer)
             return;
@@ -125,7 +128,7 @@ $execute {
 
         static_cast<RecordLayer*>(bot.layer)->onClose(nullptr);
         static_cast<RecordLayer*>(bot.layer)->openMenu(true);
-    });
+    }, mod);
 };
 
 void RecordLayer::openSaveMacro(CCObject *) {
@@ -139,7 +142,7 @@ void RecordLayer::openSaveMacro(CCObject *) {
 #ifdef GEODE_IS_IOS
     std::filesystem::path path = Mod::get()->getSaveDir() / "macros";
 #else
-    std::filesystem::path path = Settings::get().value<std::filesystem::path>("macros_folder");
+    std::filesystem::path path = Mod::get()->getSettingValue<std::filesystem::path>("macros_folder");
 #endif
 
     if (!std::filesystem::exists(path) && !utils::file::createDirectoryAll(path).isOk()) {
@@ -574,7 +577,7 @@ void RecordLayer::onAutosaves(CCObject *) {
     std::filesystem::path path = Mod::get()->getSaveDir() / "autosaves";
 #else
     std::filesystem::path path =
-        Settings::get().value<std::filesystem::path>("autosaves_folder");
+        Mod::get()->getSettingValue<std::filesystem::path>("autosaves_folder");
 #endif
 
     if (std::filesystem::exists(path)) {
@@ -979,7 +982,7 @@ bool RecordLayer::init() {
         menu->addChild(lbl);
     }
 
-    if (!Settings::get().value<bool>("restore_page"))
+    if (!Mod::get()->getSettingValue<bool>("restore_page"))
         bot.currentPage = 0;
 
     goToSettingsPage(bot.currentPage);

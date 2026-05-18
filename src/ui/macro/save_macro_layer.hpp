@@ -21,7 +21,7 @@ class SaveMacroLayer : public geode::Popup {
   private:
     bool init() override {
         std::string defaultFormatStr =
-            Settings::get().value<std::string>("default_save_format");
+            Mod::get()->getSettingValue<std::string>("default_save_format");
         if (defaultFormatStr == "GDR") {
             defaultFormat = SaveFormat::GDR1;
             selectedFormat = SaveFormat::GDR1;
@@ -88,7 +88,7 @@ class SaveMacroLayer : public geode::Popup {
                 std::filesystem::path path =
                     Mod::get()->getSaveDir() / "macros" / macroName;
 #else
-                std::filesystem::path path = Settings::get().value<std::filesystem::path>("macros_folder") / macroName;
+                std::filesystem::path path = Mod::get()->getSettingValue<std::filesystem::path>("macros_folder") / macroName;
 #endif
                 std::string author = authorInput->getString();
                 std::string desc = descInput->getString();

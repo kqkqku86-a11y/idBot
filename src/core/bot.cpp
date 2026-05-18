@@ -7,9 +7,19 @@
 
 #include <random>
 
+namespace {
+bool g_botBootstrapping = false;
+}
+
 Bot::Bot() {
-    settings.applyDefaults();
-    settings.loadRuntimeState(*this);
+    g_botBootstrapping = true;
+    Settings::applyDefaults();
+    Settings::loadRuntimeState(*this);
+    g_botBootstrapping = false;
+}
+
+bool Bot::isBootstrapping() {
+    return g_botBootstrapping;
 }
 
 bool Bot::hasIncompatibleMods() {
@@ -164,8 +174,7 @@ void Bot::autoSave(GJGameLevel* level, int number) {
 #ifdef GEODE_IS_IOS
     std::filesystem::path autoSavesPath = Mod::get()->getSaveDir() / "autosaves";
 #else
-    std::filesystem::path autoSavesPath =
-        Settings::get().value<std::filesystem::path>("autosaves_folder");
+    std::filesystem::path autoSavesPath = Mod::get()->getSettingValue<std::filesystem::path>("autosaves_folder");
 #endif
     if (!std::filesystem::exists(autoSavesPath))
         return;
@@ -193,8 +202,7 @@ void Bot::tryAutosave(GJGameLevel* level, CheckpointObject* cp) {
 #ifdef GEODE_IS_IOS
     std::filesystem::path autoSavesPath = bot.mod->getSaveDir() / "autosaves";
 #else
-    std::filesystem::path autoSavesPath =
-        bot.settings.value<std::filesystem::path>("autosaves_folder");
+    std::filesystem::path autoSavesPath = bot.mod->getSettingValue<std::filesystem::path>("autosaves_folder");
 #endif
     if (!std::filesystem::exists(autoSavesPath)) {
         log::debug("Failed to access auto saves path.");
@@ -359,17 +367,17 @@ void Bot::syncFrameStepperMusic() {
 
 void Bot::toggleSpeedhack() {
     auto& bot = Bot::get();
-    bot.settings.save("macro_speedhack_enabled",
-                    !bot.settings.saved<bool>("macro_speedhack_enabled"));
-    bot.speedhackEnabled = bot.settings.saved<bool>("macro_speedhack_enabled");
+    bot.mod->setSavedValue("macro_speedhack_enabled",
+                           !bot.mod->getSavedValue<bool>("macro_speedhack_enabled"));
+    bot.speedhackEnabled = bot.mod->getSavedValue<bool>("macro_speedhack_enabled");
 
     if (bot.layer) {
         if (static_cast<RecordLayer*>(bot.layer)->speedhackToggle)
             static_cast<RecordLayer*>(bot.layer)->speedhackToggle->toggle(
-                bot.settings.saved<bool>("macro_speedhack_enabled"));
+                bot.mod->getSavedValue<bool>("macro_speedhack_enabled"));
     }
 
-    if (!bot.settings.saved<bool>("macro_speedhack_enabled"))
+    if (!bot.mod->getSavedValue<bool>("macro_speedhack_enabled"))
         Bot::updatePitch(1.f);
 }
 
@@ -378,7 +386,7 @@ void Bot::toggleFrameStepper() {
 
     bot.frameStepper = !bot.frameStepper;
 
-    bot.settings.save("macro_frame_stepper", bot.frameStepper);
+    bot.mod->setSavedValue("macro_frame_stepper", bot.frameStepper);
 
     bot.stepFrame = false;
     bot.suppressNextFrameStep = false;

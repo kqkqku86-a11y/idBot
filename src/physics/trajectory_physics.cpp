@@ -586,7 +586,7 @@ bool activatePortal(GJBaseGameLayer* layer, PlayerObject* player, EffectGameObje
         player->toggleDartMode(true, true);
         break;
     case GameObjectType::SpiderPortal:
-        player->toggleSpiderMode(true, true);
+
         break;
     case GameObjectType::SwingPortal:
         player->toggleSwingMode(true, true);
@@ -813,7 +813,7 @@ void collisionCheckObjects(GJBaseGameLayer* layer, PlayerObject* player, gd::vec
             ++s_passStats.obbChecks;
             OBB2D* box = getCachedObjectObb(object);
             OBB2D* boxPlayer = getPlayerBox();
-            overlaps = box && boxPlayer && box->overlaps1Way(boxPlayer);
+            overlaps = box && boxPlayer && box->overlaps1Way(boxPlayer) && boxPlayer->overlaps1Way(box);
         }
         if (!overlaps)
             continue;

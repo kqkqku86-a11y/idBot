@@ -7,47 +7,60 @@
 #include <Geode/modify/PauseLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 $execute {
-    auto& settings = Settings::get();
-
-    settings.listen<std::string>("macro_accuracy", +[](std::string value) {
+    auto* mod = Mod::get();
+    geode::listenForSettingChanges<std::string>("macro_accuracy", +[](std::string value) {
+        if (Bot::isBootstrapping())
+            return;
         auto& bot = Bot::get();
         bot.frameFixes = value == "Frame Fixes";
         bot.inputFixes = value == "Input Fixes";
-    });
+    }, mod);
 
-    settings.listen<bool>("lock_delta", +[](bool value) {
+    geode::listenForSettingChanges<bool>("lock_delta", +[](bool value) {
+        if (Bot::isBootstrapping())
+            return;
         auto& bot = Bot::get();
         bot.lockDelta = value;
         bot.updater.resetStepState();
-    });
+    }, mod);
 
-    settings.listen<std::string>("lock_delta_mode", +[](std::string value) {
+    geode::listenForSettingChanges<std::string>("lock_delta_mode", +[](std::string value) {
+        if (Bot::isBootstrapping())
+            return;
         auto& bot = Bot::get();
         bot.lockDeltaFast = value == "Fast";
         bot.updater.resetStepState();
-    });
+    }, mod);
 
-    settings.listen<bool>("lock_delta_real_time", +[](bool value) {
+    geode::listenForSettingChanges<bool>("lock_delta_real_time", +[](bool value) {
+        if (Bot::isBootstrapping())
+            return;
         auto& bot = Bot::get();
         bot.lockDeltaRealTime = value;
         bot.updater.resetStepState();
-    });
+    }, mod);
 
-    settings.listen<int64_t>("lock_delta_max_upr", +[](int64_t value) {
+    geode::listenForSettingChanges<int64_t>("lock_delta_max_upr", +[](int64_t value) {
+        if (Bot::isBootstrapping())
+            return;
         auto& bot = Bot::get();
         bot.lockDeltaMaxUpr = std::max<int64_t>(value, 1);
         bot.updater.resetStepState();
-    });
+    }, mod);
 
-    settings.listen<bool>("lock_delta_use_visual_updates", +[](bool value) {
+    geode::listenForSettingChanges<bool>("lock_delta_use_visual_updates", +[](bool value) {
+        if (Bot::isBootstrapping())
+            return;
         auto& bot = Bot::get();
         bot.lockDeltaUseVisualUpdates = value;
         bot.updater.resetStepState();
-    });
+    }, mod);
 
-    settings.listen<bool>("auto_stop_playing", +[](bool value) {
+    geode::listenForSettingChanges<bool>("auto_stop_playing", +[](bool value) {
+        if (Bot::isBootstrapping())
+            return;
         Bot::get().stopPlaying = value;
-    });
+    }, mod);
 };
 
 class $modify(PlayLayer) {
@@ -73,7 +86,7 @@ class $modify(PlayLayer) {
     }
 
     void onQuit() {
-        if (Settings::get().value<bool>("disable_speedhack") &&
+        if (Mod::get()->getSettingValue<bool>("disable_speedhack") &&
             Bot::get().speedhackEnabled)
             Bot::toggleSpeedhack();
         Bot::get().attemptStartFrame = 0;

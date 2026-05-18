@@ -123,7 +123,7 @@ class RenderPresetsLayer : public geode::Popup {
 
     void openRendersFolder(CCObject *) {
         std::filesystem::path path =
-            Settings::get().value<std::filesystem::path>("render_folder");
+            Mod::get()->getSettingValue<std::filesystem::path>("render_folder");
 
         if (std::filesystem::exists(path))
             file::openFolder(path);

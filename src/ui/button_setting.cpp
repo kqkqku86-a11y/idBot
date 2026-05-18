@@ -61,7 +61,7 @@ class MyButtonSettingNodeV3 : public SettingNodeV3 {
             layer->keyBackClicked();
 
         static_cast<RecordLayer*>(Bot::get().layer)->openMenu(
-            Settings::get().value<bool>("open_menu_instant"));
+            Mod::get()->getSettingValue<bool>("open_menu_instant"));
     }
 
     void onCommit() override {}

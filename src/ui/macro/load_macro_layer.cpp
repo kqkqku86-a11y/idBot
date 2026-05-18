@@ -95,8 +95,8 @@ LoadMacroLayer* LoadMacroLayer::create(geode::Popup* layer, geode::Popup* layer2
     std::filesystem::path macroPath = Mod::get()->getSaveDir();
     std::filesystem::path autosavePath = Mod::get()->getSaveDir();
 #else
-    std::filesystem::path macroPath = Settings::get().value<std::filesystem::path>("macros_folder");
-    std::filesystem::path autosavePath = Settings::get().value<std::filesystem::path>("autosaves_folder");
+    std::filesystem::path macroPath = Mod::get()->getSettingValue<std::filesystem::path>("macros_folder");
+    std::filesystem::path autosavePath = Mod::get()->getSettingValue<std::filesystem::path>("autosaves_folder");
 #endif
 
     if (!std::filesystem::exists(macroPath) &&
@@ -146,7 +146,7 @@ void LoadMacroLayer::onImportMacro(CCObject*) {
 #ifdef GEODE_IS_IOS
         std::filesystem::path folder = Mod::get()->getSaveDir() / "macros";
 #else
-        std::filesystem::path folder = Settings::get().value<std::filesystem::path>("macros_folder");
+        std::filesystem::path folder = Mod::get()->getSettingValue<std::filesystem::path>("macros_folder");
 #endif
 
         auto importResult = macro_conversion::importFile(pathOpt.value(), folder);
@@ -218,7 +218,7 @@ bool LoadMacroLayer::init(geode::Popup* layer, geode::Popup* layer2, bool autosa
 #ifdef GEODE_IS_IOS
             file::openFolder(Mod::get()->getSaveDir() / (isAutosaves ? "autosaves" : "macros"));
 #else
-				file::openFolder(Settings::get().value<std::filesystem::path>(isAutosaves ? "autosaves_folder" : "macros_folder"));
+				file::openFolder(Mod::get()->getSettingValue<std::filesystem::path>(isAutosaves ? "autosaves_folder" : "macros_folder"));
 #endif
         });
         btn->setPosition(ccp(115, -121));
@@ -378,7 +378,7 @@ void LoadMacroLayer::addList(bool refresh, float prevScroll) {
 #ifdef GEODE_IS_IOS
     std::filesystem::path path = Mod::get()->getSaveDir() / (isAutosaves ? "autosaves" : "macros");
 #else
-    std::filesystem::path path = Settings::get().value<std::filesystem::path>(
+    std::filesystem::path path = Mod::get()->getSettingValue<std::filesystem::path>(
         isAutosaves ? "autosaves_folder" : "macros_folder");
 #endif
     std::vector<std::filesystem::path> macros = file::readDirectory(path).unwrapOrDefault();
@@ -422,7 +422,7 @@ void LoadMacroLayer::addList(bool refresh, float prevScroll) {
     if (refresh)
         contentLayer->setPositionY(prevScroll);
 
-    cocos2d::ccColor3B color = Settings::get().value<cocos2d::ccColor3B>("background_color");
+    cocos2d::ccColor3B color = Mod::get()->getSettingValue<cocos2d::ccColor3B>("background_color");
 
     auto children = contentLayer->getChildrenExt<CCNode*>();
 

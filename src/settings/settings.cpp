@@ -1,18 +1,8 @@
 #include "settings.hpp"
 
 #include "../core/bot.hpp"
-
-Settings& Settings::get() {
-    static Settings instance;
-    return instance;
-}
-
-Mod* Settings::mod() const {
-    return Mod::get();
-}
-
-void Settings::applyDefaults() const {
-    auto* mod = this->mod();
+void Settings::applyDefaults() {
+    auto* mod = Mod::get();
 
     if (!mod->setSavedValue("defaults_set_14", true)) {
         mod->setSavedValue("render_fade_in_video", geode::utils::numToString(2));
@@ -20,8 +10,8 @@ void Settings::applyDefaults() const {
     }
 
     if (!mod->setSavedValue("defaults_set_12", true)) {
-        setValue("macros_folder", mod->getSaveDir() / "macros");
-        setValue("autosaves_folder", mod->getSaveDir() / "autosaves");
+        mod->setSettingValue("macros_folder", mod->getSaveDir() / "macros");
+        mod->setSettingValue("autosaves_folder", mod->getSaveDir() / "autosaves");
     }
 
 #ifdef GEODE_IS_ANDROID
@@ -34,13 +24,13 @@ void Settings::applyDefaults() const {
 
     if (!mod->setSavedValue("defaults_set_16", true)) {
         mod->setSavedValue("trajectory_width", 0.5f);
-        setValue("lock_delta_real_time", true);
-        setValue("lock_delta_max_upr", 10);
-        setValue("lock_delta_use_visual_updates", true);
+        mod->setSettingValue("lock_delta_real_time", true);
+        mod->setSettingValue("lock_delta_max_upr", 10);
+        mod->setSettingValue("lock_delta_use_visual_updates", true);
     }
 
     if (!mod->setSavedValue("defaults_set_10", true)) {
-        setValue("restore_page", true);
+        mod->setSettingValue("restore_page", true);
 
         mod->setSavedValue("autosave_interval_enabled", false);
         mod->setSavedValue("autosave_interval", geode::utils::numToString(10));
@@ -66,13 +56,13 @@ void Settings::applyDefaults() const {
         mod->setSavedValue("trajectory_length", geode::utils::numToString(240));
         mod->setSavedValue("trajectory_width", 0.5f);
 
-        setValue("lock_delta_real_time", true);
-        setValue("lock_delta_max_upr", 10);
-        setValue("lock_delta_use_visual_updates", true);
+        mod->setSettingValue("lock_delta_real_time", true);
+        mod->setSettingValue("lock_delta_max_upr", 10);
+        mod->setSettingValue("lock_delta_use_visual_updates", true);
     }
 
     if (!mod->setSavedValue("defaults_set3", true)) {
-        setValue("render_folder", mod->getSaveDir() / "renders");
+        mod->setSettingValue("render_folder", mod->getSaveDir() / "renders");
         mod->setSavedValue("render_file_extension", std::string(".mp4"));
         mod->setSavedValue("render_sfx_volume", 1.f);
         mod->setSavedValue("render_music_volume", 1.f);
@@ -91,7 +81,7 @@ void Settings::applyDefaults() const {
 
         mod->setSavedValue("render_codec", std::string("libx264"));
 #ifdef GEODE_IS_WINDOWS
-        setValue("ffmpeg_path", geode::dirs::getGameDir() / "ffmpeg.exe");
+        mod->setSettingValue("ffmpeg_path", geode::dirs::getGameDir() / "ffmpeg.exe");
 #endif
 
         mod->setSavedValue("render_hide_labels", true);
@@ -116,17 +106,19 @@ void Settings::applyDefaults() const {
     }
 }
 
-void Settings::loadRuntimeState(Bot& bot) const {
-    bot.showTrajectory = saved<bool>("macro_show_trajectory");
-    bot.coinFinder = saved<bool>("macro_coin_finder");
-    bot.frameStepper = saved<bool>("macro_frame_stepper");
-    bot.seedEnabled = saved<bool>("macro_seed_enabled");
-    bot.frameLabel = saved<bool>("macro_show_frame_label");
-    bot.speedhackAudio = saved<bool>("macro_speedhack_audio");
-    bot.trajectoryBothSides = saved<bool>("macro_trajectory_both_sides");
-    bot.p2mirror = saved<bool>("p2_input_mirror");
-    bot.tpsEnabled = saved<bool>("macro_tps_enabled");
-    bot.tps = saved<double>("macro_tps");
+void Settings::loadRuntimeState(Bot& bot) {
+    auto* mod = Mod::get();
+
+    bot.showTrajectory = mod->getSavedValue<bool>("macro_show_trajectory");
+    bot.coinFinder = mod->getSavedValue<bool>("macro_coin_finder");
+    bot.frameStepper = mod->getSavedValue<bool>("macro_frame_stepper");
+    bot.seedEnabled = mod->getSavedValue<bool>("macro_seed_enabled");
+    bot.frameLabel = mod->getSavedValue<bool>("macro_show_frame_label");
+    bot.speedhackAudio = mod->getSavedValue<bool>("macro_speedhack_audio");
+    bot.trajectoryBothSides = mod->getSavedValue<bool>("macro_trajectory_both_sides");
+    bot.p2mirror = mod->getSavedValue<bool>("p2_input_mirror");
+    bot.tpsEnabled = mod->getSavedValue<bool>("macro_tps_enabled");
+    bot.tps = mod->getSavedValue<double>("macro_tps");
 
     geode::queueInMainThread([&bot] {
         if (!Loader::get()->getLoadedMod("eclipse.eclipse-menu"))
@@ -136,35 +128,36 @@ void Settings::loadRuntimeState(Bot& bot) const {
         eclipse::config::setInternal("global.tpsbypass", static_cast<double>(bot.tps));
     });
 
-    bot.autoclicker = saved<bool>("autoclicker_enabled");
-    bot.autoclickerP1 = saved<bool>("autoclicker_p1");
-    bot.autoclickerP2 = saved<bool>("autoclicker_p2");
-    bot.disableShaders = saved<bool>("disableShaders");
-    bot.autosaveIntervalEnabled = saved<bool>("autosave_interval_enabled");
-    bot.autosaveEnabled = saved<bool>("macro_auto_save");
+    bot.autoclicker = mod->getSavedValue<bool>("autoclicker_enabled");
+    bot.autoclickerP1 = mod->getSavedValue<bool>("autoclicker_p1");
+    bot.autoclickerP2 = mod->getSavedValue<bool>("autoclicker_p2");
+    bot.disableShaders = mod->getSavedValue<bool>("disableShaders");
+    bot.autosaveIntervalEnabled = mod->getSavedValue<bool>("autosave_interval_enabled");
+    bot.autosaveEnabled = mod->getSavedValue<bool>("macro_auto_save");
 
-    bot.holdFor = saved<int64_t>("autoclicker_hold_for");
-    bot.releaseFor = saved<int64_t>("autoclicker_release_for");
-    bot.holdFor2 = saved<int64_t>("autoclicker_hold_for2");
-    bot.releaseFor2 = saved<int64_t>("autoclicker_release_for2");
-    bot.currentPage = saved<int64_t>("current_page");
+    bot.holdFor = mod->getSavedValue<int64_t>("autoclicker_hold_for");
+    bot.releaseFor = mod->getSavedValue<int64_t>("autoclicker_release_for");
+    bot.holdFor2 = mod->getSavedValue<int64_t>("autoclicker_hold_for2");
+    bot.releaseFor2 = mod->getSavedValue<int64_t>("autoclicker_release_for2");
+    bot.currentPage = mod->getSavedValue<int64_t>("current_page");
 
     bot.autosaveInterval =
-        geode::utils::numFromString<float>(saved<std::string>("autosave_interval")).unwrapOr(0.f) *
+        geode::utils::numFromString<float>(mod->getSavedValue<std::string>("autosave_interval"))
+            .unwrapOr(0.f) *
         60;
 
     bot.speedhackEnabled = false;
-    save("macro_speedhack_enabled", false);
+    mod->setSavedValue("macro_speedhack_enabled", false);
 
-    bot.frameOffset = value<int64_t>("frame_offset");
-    bot.lockDelta = value<bool>("lock_delta");
-    bot.lockDeltaFast = value<std::string>("lock_delta_mode") == "Fast";
-    bot.lockDeltaRealTime = value<bool>("lock_delta_real_time");
-    bot.lockDeltaMaxUpr = static_cast<int>(value<int64_t>("lock_delta_max_upr"));
-    bot.lockDeltaUseVisualUpdates = value<bool>("lock_delta_use_visual_updates");
-    bot.stopPlaying = value<bool>("auto_stop_playing");
+    bot.frameOffset = mod->getSettingValue<int64_t>("frame_offset");
+    bot.lockDelta = mod->getSettingValue<bool>("lock_delta");
+    bot.lockDeltaFast = mod->getSettingValue<std::string>("lock_delta_mode") == "Fast";
+    bot.lockDeltaRealTime = mod->getSettingValue<bool>("lock_delta_real_time");
+    bot.lockDeltaMaxUpr = static_cast<int>(mod->getSettingValue<int64_t>("lock_delta_max_upr"));
+    bot.lockDeltaUseVisualUpdates = mod->getSettingValue<bool>("lock_delta_use_visual_updates");
+    bot.stopPlaying = mod->getSettingValue<bool>("auto_stop_playing");
 
-    std::string accuracy = value<std::string>("macro_accuracy");
+    std::string accuracy = mod->getSettingValue<std::string>("macro_accuracy");
     bot.frameFixes = accuracy == "Frame Fixes";
     bot.inputFixes = accuracy == "Input Fixes";
 
