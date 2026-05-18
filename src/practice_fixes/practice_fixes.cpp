@@ -53,33 +53,31 @@ void restoreHeldButtons(PlayLayer* pl, const HeldButtonState& held) {
     if (!pl || !held.valid)
         return;
 
-    auto applyPlayer = [](PlayerObject* player, bool jump, bool left, bool right, bool platformer) {
+    auto queueIfDifferent = [pl](PlayerObject* player, int button, bool value, bool player2) {
         if (!player)
             return;
+        if (player->m_holdingButtons[button] == value)
+            return;
+        pl->queueButton(button, value, player2, 0.0);
+    };
 
-        player->m_holdingButtons[1] = jump;
-        player->m_jumpBuffered = jump;
+    auto applyPlayer = [&](PlayerObject* player, bool jump, bool left, bool right, bool platformer, bool player2) {
+        queueIfDifferent(player, 1, jump, player2);
 
         if (!platformer)
             return;
 
-        player->m_holdingButtons[2] = left;
-        player->m_holdingButtons[3] = right;
-        player->m_holdingLeft = left;
-        player->m_holdingRight = right;
-        player->m_platformerMovingLeft = left;
-        player->m_platformerMovingRight = right;
-        if (left != right)
-            player->m_leftPressedFirst = left;
+        queueIfDifferent(player, 2, left, player2);
+        queueIfDifferent(player, 3, right, player2);
     };
 
     bool twoPlayer = pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode;
     bool p1Holding = held.p1Holding || (held.p2Holding && !twoPlayer);
 
-    applyPlayer(pl->m_player1, p1Holding, held.p1Left, held.p1Right, pl->m_isPlatformer);
+    applyPlayer(pl->m_player1, p1Holding, held.p1Left, held.p1Right, pl->m_isPlatformer, false);
 
     if (pl->m_gameState.m_isDualMode && twoPlayer)
-        applyPlayer(pl->m_player2, held.p2Holding, held.p2Left, held.p2Right, pl->m_isPlatformer);
+        applyPlayer(pl->m_player2, held.p2Holding, held.p2Left, held.p2Right, pl->m_isPlatformer, true);
 }
 
 struct PracticeCheckpointData {

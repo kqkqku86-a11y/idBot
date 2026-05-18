@@ -147,7 +147,6 @@ bool shouldLogSlowTrajectory(int64_t totalMs) {
 }
 
 int64_t g_lastTrajectoryRefreshMs = 0;
-int g_refreshIntervalFrames = 1;
 
 int adaptiveLengthCap(int requestedLength) {
     int cap = requestedLength;
@@ -162,14 +161,6 @@ int adaptiveLengthCap(int requestedLength) {
 
 void storeRefreshCost(int64_t ms) {
     g_lastTrajectoryRefreshMs = ms;
-    if (ms >= 24)
-        g_refreshIntervalFrames = 4;
-    else if (ms >= 16)
-        g_refreshIntervalFrames = 3;
-    else if (ms >= 10)
-        g_refreshIntervalFrames = 2;
-    else
-        g_refreshIntervalFrames = 1;
 }
 }
 
@@ -194,41 +185,23 @@ void ShowTrajectory::trajectoryOff() {
 }
 
 void ShowTrajectory::refreshIfNeeded() {
-    static bool cachedSignatureValid = false;
-    static uint64_t cachedSignature = 0;
     static int s_lastRefreshFrame = -1;
-    static int s_nextAllowedRefreshFrame = -1;
 
     auto& bot = Bot::get();
-    if (!bot.showTrajectory) {
-        cachedSignatureValid = false;
+    if (!bot.showTrajectory)
         return;
-    }
 
     if (bot.creatingTrajectory)
         return;
 
     auto* pl = PlayLayer::get();
-    if (!pl || pl->m_isPaused || !pl->m_player1) {
-        cachedSignatureValid = false;
+    if (!pl || pl->m_isPaused || !pl->m_player1)
         return;
-    }
 
     int frameNow = Bot::getCurrentFrame();
     if (frameNow == s_lastRefreshFrame)
         return;
-    if (s_nextAllowedRefreshFrame >= 0 && frameNow < s_nextAllowedRefreshFrame)
-        return;
-
-    auto* node = trajectoryNode();
-    uint64_t signature = trajectoryRefreshSignature(bot, pl);
-    if (cachedSignatureValid && cachedSignature == signature && node && node->isVisible())
-        return;
-
-    cachedSignature = signature;
-    cachedSignatureValid = true;
     s_lastRefreshFrame = frameNow;
-    s_nextAllowedRefreshFrame = frameNow + std::max(g_refreshIntervalFrames, 1);
     updateTrajectory(pl);
 }
 
