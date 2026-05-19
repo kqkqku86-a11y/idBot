@@ -1,18 +1,16 @@
 #include "trajectory_physics.hpp"
 
 #include <cstdint>
-#include <algorithm>
 #include <unordered_map>
-#include <vector>
 
 using namespace geode::prelude;
 
 namespace xdbot::trajectory_physics {
 namespace {
 Context const* activeContext = nullptr;
+thread_local std::unordered_map<uintptr_t, CCRect> s_objectRectCache;
+thread_local std::unordered_map<uintptr_t, OBB2D*> s_objectObbCache;
 thread_local std::unordered_map<int, bool> s_spawnChannelHasTrajectoryTriggers;
-thread_local std::vector<GameObject*> s_spatialCandidates;
-thread_local gd::vector<GameObject*> s_candidateVector;
 thread_local PassStats s_passStats;
 
 PlayerObject* fakePlayer1() {
@@ -47,214 +45,26 @@ void rememberActivated(PlayerObject* player, EnhancedGameObject* object) {
         activeContext->rememberActivated(player, object);
 }
 
-CCRect getFastObjectRect(GameObject* object) {
-    if (!object)
-        return {};
+CCRect getCachedObjectRect(GameObject* object) {
+    auto key = reinterpret_cast<uintptr_t>(object);
+    if (auto it = s_objectRectCache.find(key); it != s_objectRectCache.end())
+        return it->second;
 
-    if (object->m_objectType == GameObjectType::Slope)
-        return object->getObjectRect(2.0, 2.0);
-
-    if (object->m_isObjectRectDirty)
-        object->getObjectRect();
-    return object->m_objectRect;
-}
-
-OBB2D* getFastObjectObb(GameObject* object) {
-    if (!object)
-        return nullptr;
-
-    if (object->m_isOrientedBoxDirty)
-        object->updateOrientedBox();
-    return object->getOrientedBox();
-}
-
-CCRect unionRect(CCRect const& a, CCRect const& b) {
-    float minX = std::min(a.getMinX(), b.getMinX());
-    float minY = std::min(a.getMinY(), b.getMinY());
-    float maxX = std::max(a.getMaxX(), b.getMaxX());
-    float maxY = std::max(a.getMaxY(), b.getMaxY());
-    return {minX, minY, maxX - minX, maxY - minY};
-}
-
-CCRect expandedRect(CCRect rect, float amount) {
-    rect.origin.x -= amount;
-    rect.origin.y -= amount;
-    rect.size.width += amount * 2.f;
-    rect.size.height += amount * 2.f;
+    auto rect = object->m_objectType == GameObjectType::Slope
+        ? object->getObjectRect(2.0, 2.0)
+        : object->getObjectRect();
+    s_objectRectCache.insert_or_assign(key, rect);
     return rect;
 }
 
-template <class Callback>
-void forSectionObjects(
-    gd::vector<gd::vector<gd::vector<GameObject*>*>*> const& sections,
-    gd::vector<gd::vector<int>*> const& sectionSizes,
-    int minSectionX,
-    int maxSectionX,
-    int minSectionY,
-    int maxSectionY,
-    Callback&& callback
-) {
-    int sectionXCount = static_cast<int>(sections.size());
-    if (sectionXCount <= 0)
-        return;
+OBB2D* getCachedObjectObb(GameObject* object) {
+    auto key = reinterpret_cast<uintptr_t>(object);
+    if (auto it = s_objectObbCache.find(key); it != s_objectObbCache.end())
+        return it->second;
 
-    minSectionX = std::clamp(minSectionX, 0, sectionXCount - 1);
-    maxSectionX = std::clamp(maxSectionX, 0, sectionXCount - 1);
-    if (minSectionX > maxSectionX)
-        return;
-
-    for (int sectionX = minSectionX; sectionX <= maxSectionX; sectionX++) {
-        auto* column = sections.at(sectionX);
-        auto* sizeColumn = sectionX < static_cast<int>(sectionSizes.size())
-            ? sectionSizes.at(sectionX)
-            : nullptr;
-        if (!column)
-            continue;
-
-        int sectionYCount = static_cast<int>(column->size());
-        if (sectionYCount <= 0)
-            continue;
-
-        int clampedMinY = std::clamp(minSectionY, 0, sectionYCount - 1);
-        int clampedMaxY = std::clamp(maxSectionY, 0, sectionYCount - 1);
-        if (clampedMinY > clampedMaxY)
-            continue;
-
-        for (int sectionY = clampedMinY; sectionY <= clampedMaxY; sectionY++) {
-            auto* objects = column->at(sectionY);
-            if (!objects)
-                continue;
-
-            int objectCount = static_cast<int>(objects->size());
-            if (sizeColumn && sectionY < static_cast<int>(sizeColumn->size()))
-                objectCount = std::min(objectCount, sizeColumn->at(sectionY));
-
-            for (int i = 0; i < objectCount; i++)
-                callback(objects->at(i));
-        }
-    }
-}
-
-void collectSpatialCandidates(
-    GJBaseGameLayer* layer,
-    CCRect const& queryRect,
-    std::vector<GameObject*>& out
-) {
-    if (!layer)
-        return;
-
-    auto addObject = [&](GameObject* object) {
-        if (!object)
-            return;
-
-        out.push_back(object);
-    };
-
-    float sectionXFactor = layer->m_sectionXFactor;
-    float sectionYFactor = layer->m_sectionYFactor;
-    if (sectionXFactor <= 0.f || sectionYFactor <= 0.f)
-        return;
-
-    int minSectionX = static_cast<int>(std::floor(std::max(queryRect.getMinX(), 0.f) * sectionXFactor)) - 1;
-    int maxSectionX = static_cast<int>(std::floor(std::max(queryRect.getMaxX(), 0.f) * sectionXFactor)) + 1;
-    int minSectionY = static_cast<int>(std::floor(std::max(queryRect.getMinY(), 0.f) * sectionYFactor)) - 1;
-    int maxSectionY = static_cast<int>(std::floor(std::max(queryRect.getMaxY(), 0.f) * sectionYFactor)) + 1;
-
-    forSectionObjects(
-        layer->m_nonEffectObjects,
-        layer->m_nonEffectObjectsSizes,
-        minSectionX,
-        maxSectionX,
-        minSectionY,
-        maxSectionY,
-        addObject
-    );
-
-    for (int i = 0; i < layer->m_calcNonEffectObjectsSize &&
-         i < static_cast<int>(layer->m_calcNonEffectObjects.size()); i++) {
-        addObject(layer->m_calcNonEffectObjects.at(i));
-    }
-
-    if (out.size() > 1) {
-        std::sort(out.begin(), out.end());
-        out.erase(std::unique(out.begin(), out.end()), out.end());
-    }
-}
-
-bool rectsOverlap(CCRect const& a, CCRect const& b) {
-    return a.getMinX() <= b.getMaxX() &&
-        b.getMinX() <= a.getMaxX() &&
-        a.getMinY() <= b.getMaxY() &&
-        b.getMinY() <= a.getMaxY();
-}
-
-bool objectOverlapsPlayer(GJBaseGameLayer* layer, PlayerObject* player, GameObject* object) {
-    if (!layer || !player || !object)
-        return false;
-
-    if (object->m_objectRadius > 0.f)
-        return layer->playerCircleCollision(player, object);
-
-    return rectsOverlap(player->getObjectRect(), getFastObjectRect(object));
-}
-
-void resolveSolidCollisions(GJBaseGameLayer* layer, PlayerObject* player, float dt) {
-    if (!layer || !player)
-        return;
-
-    for (int i = layer->m_solidCollisionObjectsCount - 1; i >= 0; i--) {
-        if (i >= static_cast<int>(layer->m_solidCollisionObjects.size()))
-            continue;
-
-        GameObject* object = layer->m_solidCollisionObjects.at(i);
-        if (!object || object->m_isGroupDisabled)
-            continue;
-        if (object->m_isObjectRectDirty)
-            object->getObjectRect();
-        if (!rectsOverlap(player->getObjectRect(), object->m_objectRect))
-            continue;
-
-        CCRect emptyRect{0.f, 0.f, 0.f, 0.f};
-        player->collidedWithObject(dt, object, emptyRect, false);
-    }
-}
-
-bool resolveHazardCollisions(GJBaseGameLayer* layer, PlayerObject* player, float dt, bool ignoreDamage) {
-    if (!layer || !player)
-        return false;
-
-    for (int i = 0; i < layer->m_hazardCollisionObjectsCount; i++) {
-        if (i >= static_cast<int>(layer->m_hazardCollisionObjects.size()))
-            continue;
-
-        GameObject* object = layer->m_hazardCollisionObjects.at(i);
-        if (!object || object->m_isGroupDisabled)
-            continue;
-        if (!objectOverlapsPlayer(layer, player, object))
-            continue;
-
-        bool overlaps = true;
-        if (object->m_shouldUseOuterOb &&
-            (!layer->m_levelSettings->m_fixRadiusCollision || object->m_objectRadius <= 0.f)) {
-            ++s_passStats.obbChecks;
-            player->updateOrientedBox();
-            auto* objectBox = getFastObjectObb(object);
-            auto* playerBox = player->getOrientedBox();
-            overlaps = objectBox && playerBox &&
-                objectBox->overlaps1Way(playerBox) &&
-                playerBox->overlaps1Way(objectBox);
-        }
-        if (!overlaps)
-            continue;
-
-        if (ignoreDamage)
-            return true;
-
-        player->m_gameLayer->destroyPlayer(player, object);
-        return true;
-    }
-
-    return false;
+    auto* box = object->getOrientedBox();
+    s_objectObbCache.insert_or_assign(key, box);
+    return box;
 }
 
 float gravitySign(PlayerObject* player) {
@@ -410,18 +220,16 @@ void setContext(Context const* context) {
 }
 
 void beginTrajectoryPass() {
+    s_objectRectCache.clear();
+    s_objectObbCache.clear();
     s_spawnChannelHasTrajectoryTriggers.clear();
-    s_spatialCandidates.clear();
-    s_candidateVector.clear();
-    s_spatialCandidates.reserve(128);
-    s_candidateVector.reserve(128);
     s_passStats = {};
 }
 
 void endTrajectoryPass() {
+    s_objectRectCache.clear();
+    s_objectObbCache.clear();
     s_spawnChannelHasTrajectoryTriggers.clear();
-    s_spatialCandidates.clear();
-    s_candidateVector.clear();
 }
 
 PassStats currentPassStats() {
@@ -920,69 +728,6 @@ void checkSpawnObjects(GJBaseGameLayer* layer, PlayerObject* player) {
     }
 }
 
-int checkTrajectoryCollisions(
-    GJBaseGameLayer* layer,
-    PlayerObject* player,
-    CCRect const& previousRect,
-    CCRect const& currentRect,
-    float dt,
-    bool ignoreDamage
-) {
-    if (!layer || !player)
-        return 0;
-
-    bool wasOutOfBounds = player->m_isOutOfBounds;
-    player->m_wasTeleported = false;
-    player->m_ringJumpRelated = false;
-    player->m_collidedTopMinY = 0.0;
-    player->m_collidedBottomMaxY = 0.0;
-    player->m_collidedLeftMaxX = 0.0;
-    player->m_collidedRightMinX = 0.0;
-    auto* currentPotentialSlope = player->m_currentPotentialSlope;
-    player->m_wasOnSlope = player->m_isOnSlope;
-    player->m_isOnSlope = false;
-    player->m_isOnGround4 = player->m_isOnGround2;
-    if (player->m_unk669)
-        player->m_currentPotentialSlope = nullptr;
-    player->m_unk669 = true;
-    player->m_potentialSlopeMap.clear();
-    if (auto* slope = currentPotentialSlope)
-        player->m_potentialSlopeMap.insert({slope->m_uniqueID, slope});
-    if (auto* slope = player->m_currentSlope)
-        player->m_potentialSlopeMap.insert({slope->m_uniqueID, slope});
-    player->m_isOutOfBounds = false;
-
-    CCRect queryRect = expandedRect(unionRect(previousRect, currentRect), 32.f);
-    s_spatialCandidates.clear();
-    collectSpatialCandidates(layer, queryRect, s_spatialCandidates);
-    ++s_passStats.spatialQueries;
-    s_passStats.spatialCandidates += static_cast<int>(s_spatialCandidates.size());
-    s_passStats.maxSpatialCandidates = std::max(
-        s_passStats.maxSpatialCandidates,
-        static_cast<int>(s_spatialCandidates.size())
-    );
-
-    layer->m_solidCollisionObjectsCount = 0;
-    layer->m_hazardCollisionObjectsCount = 0;
-    if (!s_spatialCandidates.empty()) {
-        s_candidateVector.clear();
-        s_candidateVector.reserve(s_spatialCandidates.size());
-        for (auto* object : s_spatialCandidates)
-            s_candidateVector.push_back(object);
-        collisionCheckObjects(layer, player, &s_candidateVector, static_cast<int>(s_candidateVector.size()), dt);
-    }
-
-    resolveSolidCollisions(layer, player, dt);
-    if (resolveHazardCollisions(layer, player, dt, ignoreDamage))
-        return 1;
-
-    player->postCollision(dt, layer->m_isBetweenSteps);
-
-    if (wasOutOfBounds && player->m_isOutOfBounds)
-        return 1;
-    return 0;
-}
-
 void collisionCheckObjects(GJBaseGameLayer* layer, PlayerObject* player, gd::vector<GameObject*>* objects, int objectCount, float dt) {
     if (!layer || !player || !objects || objectCount <= 0)
         return;
@@ -1053,7 +798,7 @@ void collisionCheckObjects(GJBaseGameLayer* layer, PlayerObject* player, gd::vec
             continue;
         }
 
-        CCRect objectRect = getFastObjectRect(object);
+        CCRect objectRect = getCachedObjectRect(object);
 
         if (object->m_objectRadius <= 0.f) {
             if (!playerRect.intersectsRect(objectRect))
@@ -1066,7 +811,7 @@ void collisionCheckObjects(GJBaseGameLayer* layer, PlayerObject* player, gd::vec
         if (object->m_shouldUseOuterOb &&
             (!layer->m_levelSettings->m_fixRadiusCollision || object->m_objectRadius <= 0.f)) {
             ++s_passStats.obbChecks;
-            OBB2D* box = getFastObjectObb(object);
+            OBB2D* box = getCachedObjectObb(object);
             OBB2D* boxPlayer = getPlayerBox();
             overlaps = box && boxPlayer && box->overlaps1Way(boxPlayer) && boxPlayer->overlaps1Way(box);
         }

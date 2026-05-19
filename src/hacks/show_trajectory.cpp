@@ -102,326 +102,66 @@ uint64_t trajectoryRefreshSignature(Bot const& bot, PlayLayer* pl) {
     return signature;
 }
 
-uint64_t trajectoryScheduleSignature(Bot const& bot, PlayLayer* pl) {
-    uint64_t signature = 1469598103934665603ull;
-    auto mix = [&signature](uint64_t value) {
-        signature ^= value + 0x9e3779b97f4a7c15ull + (signature << 6) + (signature >> 2);
-    };
-    auto mixBool = [&mix](bool value) {
-        mix(value ? 1ull : 0ull);
-    };
-    auto mixFloat = [&mix](float value) {
-        mix(quantize(value));
-    };
-    auto mixColor = [&mixFloat](cocos2d::ccColor4F const& color) {
-        mixFloat(color.r);
-        mixFloat(color.g);
-        mixFloat(color.b);
-        mixFloat(color.a);
-    };
-
-    auto& trajectory = ShowTrajectory::get();
-    mix(reinterpret_cast<uintptr_t>(pl));
-    mixBool(pl && pl->m_gameState.m_isDualMode);
-    mixBool(pl && pl->m_isPlatformer);
-    mixBool(pl && pl->m_levelSettings && pl->m_levelSettings->m_twoPlayerMode);
-    mixBool(pl && pl->m_levelSettings && pl->m_levelSettings->m_platformerMode);
-    mixBool(bot.trajectoryBothSides);
-    mix(static_cast<uint64_t>(std::max(trajectory.length, 0)));
-    mixFloat(Bot::getTPS());
-    mixColor(trajectory.color1);
-    mixColor(trajectory.color2);
-    mixColor(trajectory.color3);
-    return signature;
-}
-
-void applyReplayButton(PlayerObject* player, PlayerButton button, bool down) {
+void applyReplayButton(PlayerObject* player, ReplayInput const& input) {
     if (!player)
         return;
 
-    if (down) {
+    auto button = static_cast<PlayerButton>(input.button);
+    if (input.down) {
         player->pushButton(button);
     } else {
         player->releaseButton(button);
     }
 }
 
-void queueReplayInputsForPrediction(
+void applyReplayInputsForPrediction(
     PlayLayer* pl,
-    std::vector<ReplayInput> const& inputs,
     size_t& inputIndex,
     uint64_t frame,
-    int respawnFrame,
+    bool simulateBothPlayers,
     bool enabled
 ) {
+    auto& bot = Bot::get();
     if (!enabled || !pl)
         return;
 
+    auto const& inputs = bot.replay.inputs;
     while (inputIndex < inputs.size() && inputs[inputIndex].frame <= frame) {
-        auto input = inputs[inputIndex];
+        auto const& input = inputs[inputIndex];
+        PlayerObject* player = input.player2 ? t.fakePlayer2 : t.fakePlayer1;
+        PlayerObject* other = input.player2 ? t.fakePlayer1 : t.fakePlayer2;
 
-        if (static_cast<int>(input.frame) != respawnFrame) {
-            input.player2 = !input.player2;
-            pl->queueButton(input.button, input.down, input.player2, 0.0);
+        if (static_cast<int>(input.frame) != bot.respawnFrame) {
+            applyReplayButton(player, input);
+            if (simulateBothPlayers && pl->m_gameState.m_isDualMode) {
+                applyReplayButton(other, input);
+            }
         }
 
         inputIndex++;
     }
 }
 
-void processQueuedReplayInputsForPrediction(
-    PlayLayer* pl,
-    size_t firstPredictionCommand,
-    bool simulateBothPlayers
-) {
-    if (!pl)
-        return;
-
-    size_t commandCount = pl->m_queuedButtons.size();
-    for (size_t i = firstPredictionCommand; i < commandCount; i++) {
-        auto const& command = pl->m_queuedButtons.at(i);
-
-        bool player2 = !command.m_isPlayer2;
-        PlayerObject* player = player2 ? t.fakePlayer2 : t.fakePlayer1;
-        PlayerObject* other = player2 ? t.fakePlayer1 : t.fakePlayer2;
-        applyReplayButton(player, command.m_button, command.m_isPush);
-
-        if (simulateBothPlayers && pl->m_gameState.m_isDualMode)
-            applyReplayButton(other, command.m_button, command.m_isPush);
-    }
-
-    pl->m_queuedButtons.resize(firstPredictionCommand);
-}
-
-struct LayerCollisionQueues {
-    size_t solidSize = 0;
-    size_t hazardSize = 0;
-    int solidCount = 0;
-    int solidIndex = 0;
-    int hazardCount = 0;
-    int hazardIndex = 0;
-
-    static LayerCollisionQueues capture(GJBaseGameLayer* layer) {
-        LayerCollisionQueues state;
-        if (!layer)
-            return state;
-
-        state.solidSize = layer->m_solidCollisionObjects.size();
-        state.hazardSize = layer->m_hazardCollisionObjects.size();
-        state.solidCount = layer->m_solidCollisionObjectsCount;
-        state.solidIndex = layer->m_solidCollisionObjectsIndex;
-        state.hazardCount = layer->m_hazardCollisionObjectsCount;
-        state.hazardIndex = layer->m_hazardCollisionObjectsIndex;
-        return state;
-    }
-
-    void restore(GJBaseGameLayer* layer) const {
-        if (!layer)
-            return;
-
-        layer->m_solidCollisionObjects.resize(solidSize);
-        layer->m_hazardCollisionObjects.resize(hazardSize);
-        layer->m_solidCollisionObjectsCount = solidCount;
-        layer->m_solidCollisionObjectsIndex = solidIndex;
-        layer->m_hazardCollisionObjectsCount = hazardCount;
-        layer->m_hazardCollisionObjectsIndex = hazardIndex;
-    }
-};
-
 bool shouldLogSlowTrajectory(int64_t totalMs) {
     return totalMs >= 50;
 }
 
-int refreshIntervalForCost(int64_t refreshMs) {
-    if (refreshMs >= 24)
-        return 4;
-    if (refreshMs >= 16)
-        return 3;
-    if (refreshMs >= 8)
-        return 2;
-    return 1;
-}
-
 int64_t g_lastTrajectoryRefreshMs = 0;
 
-int branchKey(bool player1, int mode, bool simulateBothPlayers) {
-    return (player1 ? 1 : 0) |
-        ((mode & 0xff) << 1) |
-        (simulateBothPlayers ? (1 << 10) : 0);
+int adaptiveLengthCap(int requestedLength) {
+    int cap = requestedLength;
+    if (g_lastTrajectoryRefreshMs >= 20)
+        cap = std::min(cap, 80);
+    else if (g_lastTrajectoryRefreshMs >= 12)
+        cap = std::min(cap, 120);
+    else if (g_lastTrajectoryRefreshMs >= 8)
+        cap = std::min(cap, 180);
+    return std::max(cap, 0);
 }
 
-bool sameBranchJobs(
-    std::vector<ShowTrajectory::BranchJob> const& lhs,
-    std::vector<ShowTrajectory::BranchJob> const& rhs
-) {
-    if (lhs.size() != rhs.size())
-        return false;
-
-    for (size_t i = 0; i < lhs.size(); i++) {
-        if (lhs[i].player1 != rhs[i].player1 ||
-            lhs[i].mode != rhs[i].mode ||
-            lhs[i].simulateBothPlayers != rhs[i].simulateBothPlayers) {
-            return false;
-        }
-    }
-
-    return true;
+void storeRefreshCost(int64_t ms) {
+    g_lastTrajectoryRefreshMs = ms;
 }
-
-bool playerHoldingJump(PlayerObject* player) {
-    return player && (player->m_jumpBuffered || player->m_holdingButtons[1]);
-}
-
-bool playerHoldingLeft(PlayerObject* player) {
-    return player && (player->m_holdingLeft || player->m_holdingButtons[2]);
-}
-
-bool playerHoldingRight(PlayerObject* player) {
-    return player && (player->m_holdingRight || player->m_holdingButtons[3]);
-}
-
-int followModeFor(PlayLayer* pl, PlayerObject* player) {
-    int mode = playerHoldingJump(player) ? ShowTrajectory::Hold : ShowTrajectory::Release;
-    if (!pl || !pl->m_levelSettings || !pl->m_levelSettings->m_platformerMode)
-        return mode;
-
-    bool left = playerHoldingLeft(player);
-    bool right = playerHoldingRight(player);
-    if (left == right)
-        return mode;
-
-    return mode | (left ? ShowTrajectory::Left : ShowTrajectory::Right);
-}
-
-bool sameBranch(ShowTrajectory::BranchJob const& lhs, ShowTrajectory::BranchJob const& rhs) {
-    return lhs.player1 == rhs.player1 &&
-        lhs.mode == rhs.mode &&
-        lhs.simulateBothPlayers == rhs.simulateBothPlayers;
-}
-
-void pushBranchJobUnique(
-    std::vector<ShowTrajectory::BranchJob>& jobs,
-    bool player1,
-    int mode,
-    bool simulateBothPlayers
-) {
-    ShowTrajectory::BranchJob job { player1, mode, simulateBothPlayers };
-    if (std::find_if(jobs.begin(), jobs.end(), [&](auto const& existing) {
-        return sameBranch(existing, job);
-    }) == jobs.end()) {
-        jobs.push_back(job);
-    }
-}
-
-std::vector<ShowTrajectory::BranchJob> buildBranchJobs(
-    PlayLayer* pl,
-    bool platformerBothSides
-) {
-    std::vector<ShowTrajectory::BranchJob> jobs;
-    if (!pl || !pl->m_player1 || !pl->m_levelSettings)
-        return jobs;
-
-    auto addModeSet = [&](bool player1, bool simulateBothPlayers) {
-        PlayerObject* realPlayer = player1 ? pl->m_player1 : pl->m_player2;
-        pushBranchJobUnique(jobs, player1, followModeFor(pl, realPlayer), simulateBothPlayers);
-
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Hold, simulateBothPlayers);
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Swift, simulateBothPlayers);
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Release, simulateBothPlayers);
-
-        if (!pl->m_levelSettings->m_platformerMode || !platformerBothSides)
-            return;
-
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Hold | ShowTrajectory::Left, simulateBothPlayers);
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Swift | ShowTrajectory::Left, simulateBothPlayers);
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Release | ShowTrajectory::Left, simulateBothPlayers);
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Hold | ShowTrajectory::Right, simulateBothPlayers);
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Swift | ShowTrajectory::Right, simulateBothPlayers);
-        pushBranchJobUnique(jobs, player1, ShowTrajectory::Release | ShowTrajectory::Right, simulateBothPlayers);
-    };
-
-    bool simulateBoth = pl->m_gameState.m_isDualMode && !pl->m_levelSettings->m_twoPlayerMode;
-    addModeSet(true, simulateBoth);
-
-    if (pl->m_player2 && pl->m_gameState.m_isDualMode && pl->m_levelSettings->m_twoPlayerMode)
-        addModeSet(false, false);
-
-    return jobs;
-}
-
-ShowTrajectory::BranchNodeState* branchStateFor(int key, bool player1) {
-    auto* root = ShowTrajectory::trajectoryNode();
-    if (auto it = t.branchNodes.find(key); it != t.branchNodes.end()) {
-        auto* node = it->second.node;
-        if (node && !node->getParent())
-            root->addChild(node);
-        it->second.player1 = player1;
-        return &it->second;
-    }
-
-    auto* node = TrajectoryNode::create();
-    if (!node)
-        return nullptr;
-
-    node->retain();
-    root->addChild(node);
-    auto [it, _] = t.branchNodes.insert_or_assign(key, ShowTrajectory::BranchNodeState{
-        node,
-        player1,
-        {},
-        false,
-    });
-    return &it->second;
-}
-
-void clearBranchNodes(bool remove) {
-    for (auto& [_, state] : t.branchNodes) {
-        auto* node = state.node;
-        if (!node)
-            continue;
-
-        node->clear();
-        node->setVisible(false);
-        node->setPosition({0.f, 0.f});
-        state.hasAnchor = false;
-        if (remove && node->getParent())
-            node->removeFromParentAndCleanup(false);
-        if (remove)
-            node->release();
-    }
-
-    if (remove)
-        t.branchNodes.clear();
-}
-
-void updateBranchNodeOffsets(PlayLayer* pl) {
-    if (!pl)
-        return;
-
-    for (auto& [_, state] : t.branchNodes) {
-        auto* node = state.node;
-        if (!node || !state.hasAnchor)
-            continue;
-
-        PlayerObject* realPlayer = state.player1 ? pl->m_player1 : pl->m_player2;
-        if (!realPlayer) {
-            node->setPosition({0.f, 0.f});
-            continue;
-        }
-
-        auto delta = realPlayer->getPosition() - state.anchor;
-        node->setPosition(delta);
-    }
-}
-
-int branchBudgetForCost(int64_t refreshMs) {
-    if (t.branchJobs.empty())
-        return 0;
-    if (refreshMs >= 8)
-        return 1;
-    return 2;
-}
-
 }
 
 $execute {
@@ -442,35 +182,35 @@ void ShowTrajectory::trajectoryOff() {
         node->clear();
         node->setVisible(false);
     }
-    clearBranchNodes(false);
 }
 
 void ShowTrajectory::refreshIfNeeded() {
-    static int s_lastRefreshFrame = -1;
-    static int s_lastComputedFrame = -1;
+    static bool cachedSignatureValid = false;
+    static uint64_t cachedSignature = 0;
 
     auto& bot = Bot::get();
-    if (!bot.showTrajectory)
+    if (!bot.showTrajectory) {
+        cachedSignatureValid = false;
         return;
+    }
 
-    if (bot.creatingTrajectory)
+    if (bot.creatingTrajectory) {
         return;
+    }
 
     auto* pl = PlayLayer::get();
-    if (!pl || pl->m_isPaused || !pl->m_player1)
+    if (!pl || pl->m_isPaused || !pl->m_player1) {
+        cachedSignatureValid = false;
+        return;
+    }
+
+    auto* node = trajectoryNode();
+    uint64_t signature = trajectoryRefreshSignature(bot, pl);
+    if (cachedSignatureValid && cachedSignature == signature && node && node->isVisible())
         return;
 
-    int frameNow = Bot::getCurrentFrame();
-    if (frameNow == s_lastRefreshFrame)
-        return;
-    s_lastRefreshFrame = frameNow;
-
-    bool hasActiveBranchCache = !t.branchJobs.empty();
-    int refreshInterval = refreshIntervalForCost(g_lastTrajectoryRefreshMs);
-    if (!hasActiveBranchCache && s_lastComputedFrame >= 0 && frameNow - s_lastComputedFrame < refreshInterval)
-        return;
-
-    s_lastComputedFrame = frameNow;
+    cachedSignature = signature;
+    cachedSignatureValid = true;
     updateTrajectory(pl);
 }
 
@@ -623,33 +363,17 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
     geode::utils::Timer setupTimer;
     auto& bot = Bot::get();
     bool platformerBothSides = bot.trajectoryBothSides;
-    auto jobs = buildBranchJobs(pl, platformerBothSides);
-    if (jobs.empty())
-        return;
-
-    uint64_t signature = trajectoryScheduleSignature(bot, pl);
-    bool resetSchedule = signature != t.branchSignature || !sameBranchJobs(jobs, t.branchJobs);
-    if (resetSchedule) {
-        t.branchSignature = signature;
-        t.branchJobs = std::move(jobs);
-        t.nextBranchJob = 0;
-        clearBranchNodes(false);
-    } else if (t.nextBranchJob >= t.branchJobs.size()) {
-        t.nextBranchJob = 0;
-    }
 
     bot.safeMode = true;
 
     t.creatingTrajectory = true;
     bot.creatingTrajectory = true;
 
-    auto* rootNode = t.trajectoryNode();
-    rootNode->setVisible(true);
-    rootNode->clear();
+    t.trajectoryNode()->setVisible(true);
+    t.trajectoryNode()->clear();
     xdbot::trajectory_physics::beginTrajectoryPass();
 
     auto baseGameState = pl->m_gameState;
-    auto baseCollisionQueues = LayerCollisionQueues::capture(pl);
     EffectManagerState baseEffectState;
     EffectManagerState* baseEffectStatePtr = nullptr;
     if (pl->m_effectManager) {
@@ -661,76 +385,77 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
     int p1BranchCount = 0;
     int p2BranchCount = 0;
     geode::utils::Timer p1Timer;
-    geode::utils::Timer p2Timer;
 
-    int branchBudget = branchBudgetForCost(g_lastTrajectoryRefreshMs);
-    int processedBranches = 0;
-    while (t.nextBranchJob < t.branchJobs.size() && processedBranches < branchBudget) {
-        auto const& job = t.branchJobs[t.nextBranchJob];
-        bool canRun = false;
-        if (job.player1) {
-            canRun = ensureFakePlayer(pl, true);
-            if (canRun && job.simulateBothPlayers && pl->m_player2)
-                canRun = ensureFakePlayer(pl, false);
-        } else {
-            canRun = ensureFakePlayer(pl, false);
+    if (ensureFakePlayer(pl, true)) {
+        bool simulateBoth = pl->m_gameState.m_isDualMode && !pl->m_levelSettings->m_twoPlayerMode;
+        if (simulateBoth && pl->m_player2)
+            ensureFakePlayer(pl, false);
+
+        createTrajectory(pl, true, Hold, simulateBoth, baseGameState, baseEffectStatePtr, {});
+        p1BranchCount++;
+        createTrajectory(pl, true, Swift, simulateBoth, baseGameState, baseEffectStatePtr, {});
+        p1BranchCount++;
+        createTrajectory(pl, true, Release, simulateBoth, baseGameState, baseEffectStatePtr, {});
+        p1BranchCount++;
+
+        if (pl->m_levelSettings->m_platformerMode && platformerBothSides) {
+            createTrajectory(pl, true, Hold | Left, simulateBoth, baseGameState, baseEffectStatePtr, {});
+            p1BranchCount++;
+            createTrajectory(pl, true, Swift | Left, simulateBoth, baseGameState, baseEffectStatePtr, {});
+            p1BranchCount++;
+            createTrajectory(pl, true, Release | Left, simulateBoth, baseGameState, baseEffectStatePtr, {});
+            p1BranchCount++;
+            createTrajectory(pl, true, Hold | Right, simulateBoth, baseGameState, baseEffectStatePtr, {});
+            p1BranchCount++;
+            createTrajectory(pl, true, Swift | Right, simulateBoth, baseGameState, baseEffectStatePtr, {});
+            p1BranchCount++;
+            createTrajectory(pl, true, Release | Right, simulateBoth, baseGameState, baseEffectStatePtr, {});
+            p1BranchCount++;
         }
-
-        auto key = branchKey(job.player1, job.mode, job.simulateBothPlayers);
-        auto* branchState = branchStateFor(key, job.player1);
-        auto* node = branchState ? branchState->node : nullptr;
-        if (node) {
-            node->setPosition({0.f, 0.f});
-            node->clear();
-            node->setVisible(true);
-        }
-
-        if (canRun && node) {
-            PredictionConfig config;
-            config.drawNode = node;
-            createTrajectory(
-                pl,
-                job.player1,
-                job.mode,
-                job.simulateBothPlayers,
-                baseGameState,
-                baseEffectStatePtr,
-                config
-            );
-            if (job.player1)
-                p1BranchCount++;
-            else
-                p2BranchCount++;
-
-            PlayerObject* anchorPlayer = job.player1 ? pl->m_player1 : pl->m_player2;
-            if (branchState && anchorPlayer) {
-                branchState->anchor = anchorPlayer->getPosition();
-                branchState->hasAnchor = true;
-            }
-        }
-
-        t.nextBranchJob++;
-        processedBranches++;
     }
 
-    updateBranchNodeOffsets(pl);
-
     int64_t p1Ms = p1Timer.elapsed<>();
+    geode::utils::Timer p2Timer;
+
+    if (pl->m_player2 && pl->m_gameState.m_isDualMode && pl->m_levelSettings->m_twoPlayerMode) {
+        if (ensureFakePlayer(pl, false)) {
+            createTrajectory(pl, false, Hold, false, baseGameState, baseEffectStatePtr, {});
+            p2BranchCount++;
+            createTrajectory(pl, false, Swift, false, baseGameState, baseEffectStatePtr, {});
+            p2BranchCount++;
+            createTrajectory(pl, false, Release, false, baseGameState, baseEffectStatePtr, {});
+            p2BranchCount++;
+
+            if (pl->m_levelSettings->m_platformerMode && platformerBothSides) {
+                createTrajectory(pl, false, Hold | Left, false, baseGameState, baseEffectStatePtr, {});
+                p2BranchCount++;
+                createTrajectory(pl, false, Swift | Left, false, baseGameState, baseEffectStatePtr, {});
+                p2BranchCount++;
+                createTrajectory(pl, false, Release | Left, false, baseGameState, baseEffectStatePtr, {});
+                p2BranchCount++;
+                createTrajectory(pl, false, Hold | Right, false, baseGameState, baseEffectStatePtr, {});
+                p2BranchCount++;
+                createTrajectory(pl, false, Swift | Right, false, baseGameState, baseEffectStatePtr, {});
+                p2BranchCount++;
+                createTrajectory(pl, false, Release | Right, false, baseGameState, baseEffectStatePtr, {});
+                p2BranchCount++;
+            }
+        }
+    }
     int64_t p2Ms = p2Timer.elapsed<>();
 
     pl->m_gameState = baseGameState;
-    baseCollisionQueues.restore(pl);
     if (pl->m_effectManager && baseEffectStatePtr)
         pl->m_effectManager->loadFromState(*baseEffectStatePtr);
 
     hideFakePlayer(t.fakePlayer1);
     hideFakePlayer(t.fakePlayer2);
     auto totalMs = totalTimer.elapsed<>();
-    g_lastTrajectoryRefreshMs = totalMs;
+    storeRefreshCost(totalMs);
     if (shouldLogSlowTrajectory(totalMs)) {
         auto passStats = xdbot::trajectory_physics::currentPassStats();
         log::info(
-            "Trajectory slow: total={}ms setup={}ms p1={}ms p2={}ms p1Branches={} p2Branches={} length={} spatialQueries={} spatialCandidates={} maxSpatialCandidates={} objs={} solid={} hazard={} effects={} obb={} spawnVisited={} spawnCandidates={} spawnTriggered={} dual={} tp={} bothSides={}",
+            "Trajectory slow: total={}ms setup={}ms p1={}ms p2={}ms p1Branches={} p2Branches={} length={} objs={} solid={} hazard={} effects={} obb={} spawnVisited={} spawnCandidates={} spawnTriggered={} dual={} tp={} bothSides={}",
             totalMs,
             setupMs,
             p1Ms,
@@ -738,9 +463,6 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
             p1BranchCount,
             p2BranchCount,
             t.length,
-            passStats.spatialQueries,
-            passStats.spatialCandidates,
-            passStats.maxSpatialCandidates,
             passStats.objectsVisited,
             passStats.solidQueued,
             passStats.hazardQueued,
@@ -780,7 +502,6 @@ ShowTrajectory::PredictionResult ShowTrajectory::simulate(
     xdbot::trajectory_physics::beginTrajectoryPass();
 
     auto baseGameState = pl->m_gameState;
-    auto baseCollisionQueues = LayerCollisionQueues::capture(pl);
     EffectManagerState baseEffectState;
     EffectManagerState* baseEffectStatePtr = nullptr;
     if (pl->m_effectManager) {
@@ -806,7 +527,6 @@ ShowTrajectory::PredictionResult ShowTrajectory::simulate(
     }
 
     pl->m_gameState = baseGameState;
-    baseCollisionQueues.restore(pl);
     if (pl->m_effectManager && baseEffectStatePtr)
         pl->m_effectManager->loadFromState(*baseEffectStatePtr);
 
@@ -902,25 +622,16 @@ bool ShowTrajectory::iterate(
     bool dead = (player == t.fakePlayer1 && t.deadP1) || (player == t.fakePlayer2 && t.deadP2);
     if (dead) {
         if (config.draw)
-            drawPlayerHitbox(player, config.drawNode ? config.drawNode : t.trajectoryNode());
+            drawPlayerHitbox(player, t.trajectoryNode());
         return true;
     }
 
     t.delta = (1.f / tps) * 60.f * timeWarp;
     player->m_playEffects = false;
-    CCRect previousRect = player->getObjectRect();
     player->update(t.delta);
     player->updateRotation(t.delta);
-    CCRect currentRect = player->getObjectRect();
 
-    if (xdbot::trajectory_physics::checkTrajectoryCollisions(
-        pl,
-        player,
-        previousRect,
-        currentRect,
-        t.delta,
-        false
-    ) == 1) {
+    if (pl->checkCollisions(player, t.delta, false) == 1) {
         if (player == t.fakePlayer1)
             t.deadP1 = true;
         else if (player == t.fakePlayer2)
@@ -933,20 +644,16 @@ bool ShowTrajectory::iterate(
         pl->m_effectManager->postCollisionCheck();
 
     if (config.draw) {
-        float width = config.drawWidth;
-        if (width <= 0.f) {
-            width = t.width;
-        }
-        if (config.drawWidth <= 0.f && pl->m_gameState.m_cameraZoom > 0.f)
+        float width = t.width;
+        if (pl->m_gameState.m_cameraZoom > 0.f)
             width /= pl->m_gameState.m_cameraZoom;
-        auto* drawNode = config.drawNode ? config.drawNode : t.trajectoryNode();
-        drawNode->drawSegment(prevPos, player->getPosition(), width, color);
+        t.trajectoryNode()->drawSegment(prevPos, player->getPosition(), width, color);
     }
 
     dead = (player == t.fakePlayer1 && t.deadP1) || (player == t.fakePlayer2 && t.deadP2);
     if (dead) {
         if (config.draw)
-            drawPlayerHitbox(player, config.drawNode ? config.drawNode : t.trajectoryNode());
+            drawPlayerHitbox(player, t.trajectoryNode());
         return true;
     }
 
@@ -977,8 +684,6 @@ ShowTrajectory::PredictionResult ShowTrajectory::createTrajectory(
     if (!fakePlayer || !realPlayer)
         return result;
 
-    auto branchCollisionQueues = LayerCollisionQueues::capture(pl);
-    size_t queuedButtonStart = pl->m_queuedButtons.size();
     PlayerPracticeFixes::transfer(realPlayer, fakePlayer, true);
     hideFakePlayer(fakePlayer);
 
@@ -1005,20 +710,11 @@ ShowTrajectory::PredictionResult ShowTrajectory::createTrajectory(
     bool stopMain = false;
     bool stopOther = !simulateBothPlayers || !otherFake;
     int predictionLength = std::min(std::max(t.length, 0), std::max(config.maxLength, 0));
+    predictionLength = adaptiveLengthCap(predictionLength);
     PredictionConfig iterConfig = config;
-    if (iterConfig.draw && !iterConfig.drawNode)
-        iterConfig.drawNode = t.trajectoryNode();
-    if (iterConfig.draw && iterConfig.drawWidth <= 0.f) {
-        iterConfig.drawWidth = t.width;
-        if (pl->m_gameState.m_cameraZoom > 0.f)
-            iterConfig.drawWidth /= pl->m_gameState.m_cameraZoom;
-    }
-    uint64_t baseFrame = static_cast<uint64_t>(Bot::getCurrentFrame());
-    auto const& replayInputs = bot.replay.inputs;
-    int respawnFrame = bot.respawnFrame;
-    bool replayPredictionEnabled = config.applyReplayInputs && bot.state == state::playing;
     size_t replayInputIndex = 0;
-    if (replayPredictionEnabled) {
+    if (config.applyReplayInputs && bot.state == state::playing) {
+        uint64_t startFrame = static_cast<uint64_t>(Bot::getCurrentFrame());
         replayInputIndex = bot.currentAction;
     }
     for (int i = 0; i < predictionLength; i++) {
@@ -1026,16 +722,15 @@ ShowTrajectory::PredictionResult ShowTrajectory::createTrajectory(
             color.a = (predictionLength - i) / 40.f;
         otherColor.a = color.a;
 
-        uint64_t frame = baseFrame + static_cast<uint64_t>(i);
-        queueReplayInputsForPrediction(
+        uint64_t frame =
+            static_cast<uint64_t>(Bot::getCurrentFrame()) + static_cast<uint64_t>(i);
+        applyReplayInputsForPrediction(
             pl,
-            replayInputs,
             replayInputIndex,
             frame,
-            respawnFrame,
-            replayPredictionEnabled
+            simulateBothPlayers,
+            config.applyReplayInputs
         );
-        processQueuedReplayInputsForPrediction(pl, queuedButtonStart, simulateBothPlayers);
 
         if (simulateBothPlayers && !pl->m_gameState.m_isDualMode)
             stopOther = true;
@@ -1051,12 +746,20 @@ ShowTrajectory::PredictionResult ShowTrajectory::createTrajectory(
             break;
     }
 
+    if (config.draw) {
+        t.deathRotation = fakePlayer->getRotation();
+        drawPlayerHitbox(fakePlayer, t.trajectoryNode());
+
+        if (simulateBothPlayers && otherFake && !stopOther) {
+            t.deathRotation = otherFake->getRotation();
+            drawPlayerHitbox(otherFake, t.trajectoryNode());
+        }
+    }
+
     restoreSnapshots();
     t.activatedObjectsP1.clear();
     t.activatedObjectsP2.clear();
     t.snapshotObjects.clear();
-    pl->m_queuedButtons.resize(queuedButtonStart);
-    branchCollisionQueues.restore(pl);
     pl->m_gameState = baseGameState;
     if (pl->m_effectManager && baseEffectState)
         pl->m_effectManager->loadFromState(*baseEffectState);
@@ -1195,10 +898,6 @@ void ShowTrajectory::detachTrajectoryNode() {
     if (!node)
         return;
 
-    clearBranchNodes(true);
-    t.branchJobs.clear();
-    t.nextBranchJob = 0;
-    t.branchSignature = 0;
     node->clear();
     node->setVisible(false);
     if (node->getParent())
