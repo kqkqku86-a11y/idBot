@@ -28,6 +28,8 @@
 using namespace geode::prelude;
 
 namespace {
+
+
 ShowTrajectory& trajectory() {
     return ShowTrajectory::get();
 }
@@ -37,6 +39,7 @@ uintptr_t ptrId(void const* ptr) {
 }
 
 void teleportPlayerForTrajectory(GJBaseGameLayer* layer, TeleportPortalObject* object, PlayerObject* player);
+
 
 uint64_t quantize(float value) {
     return static_cast<uint64_t>(std::llround(static_cast<double>(value) * 1000.0));
@@ -110,10 +113,6 @@ bool shouldLogSlowTrajectory(int64_t totalMs) {
     return totalMs >= 50;
 }
 
-bool shouldApplyReplayInputsForPrediction(ShowTrajectory::PredictionConfig const& config) {
-    return config.applyReplayInputs && Bot::get().state == state::playing;
-}
-
 cocos2d::ccColor4F colorForMode(int mode) {
     auto& t = trajectory();
     if (mode & ShowTrajectory::Hold)
@@ -125,6 +124,11 @@ cocos2d::ccColor4F colorForMode(int mode) {
 
 cocos2d::ccColor4F invertedColor(cocos2d::ccColor4F color) {
     return cocos2d::ccc4f(1.f - color.r, 1.f - color.g, 1.f - color.b, color.a);
+}
+
+
+bool shouldApplyReplayInputsForPrediction(ShowTrajectory::PredictionConfig const& config) {
+    return config.applyReplayInputs && Bot::get().state == state::playing;
 }
 
 void applyReplayButton(PlayerObject* player, ReplayInput const& input) {
@@ -169,6 +173,7 @@ void applyReplayInputsForPrediction(
         inputIndex++;
     }
 }
+
 
 struct LayerStateGuard {
     PlayLayer* pl = nullptr;
@@ -232,6 +237,7 @@ struct LayerStateGuard {
             pl->m_effectManager->m_persistentItemCountMap = persistentItemMap;
     }
 };
+
 
 void clearCollisionLogs(PlayerObject* player) {
     if (!player)
@@ -334,6 +340,7 @@ void resetFakePlayerFrom(PlayerObject* realPlayer, PlayerObject* fakePlayer) {
     ShowTrajectory::hideFakePlayer(fakePlayer);
 }
 
+
 float advanceGameClock(PlayLayer* pl, PlayerObject* p1, PlayerObject* p2) {
     float tps = std::max(Bot::getTPS(), 1.f);
     double physicsSeconds = 1.0 / tps;
@@ -364,6 +371,7 @@ float advanceGameClock(PlayLayer* pl, PlayerObject* p1, PlayerObject* p2) {
     return (1.f / tps) * 60.f;
 }
 
+
 void updateFakePlayer(PlayerObject* player, float delta) {
     if (!player || ShowTrajectory::fakePlayerDead(player))
         return;
@@ -378,6 +386,7 @@ void updateFakePlayer(PlayerObject* player, float delta) {
     player->updateRotation(delta);
     player->m_shipRotation = player->getPosition();
 }
+
 
 void spiderTestJumpForTrajectory(PlayerObject* player) {
     if (!player)
@@ -412,6 +421,18 @@ void activateForTrajectory(EffectGameObject* object, PlayerObject* player) {
     ShowTrajectory::snapshotObject(object);
     ShowTrajectory::rememberActivated(player, object);
 }
+
+bool hasTrajectoryActivatedObject(PlayerObject* player, EnhancedGameObject* object) {
+    return ShowTrajectory::hasActivated(player, object) ||
+        ShowTrajectory::realPlayerHasActivated(player, object);
+}
+
+void rememberPortalActivation(PlayerObject* player, EffectGameObject* object) {
+    player->m_lastPortalPos = object->getPosition();
+    player->m_lastActivatedPortal = object;
+    activateForTrajectory(object, player);
+}
+
 
 void flipGravityForTrajectory(PlayerObject* player, bool gravity) {
     if (!player || player->m_isUpsideDown == gravity)
@@ -1103,6 +1124,208 @@ void triggerObjectForTrajectory(EffectGameObject* object, GJBaseGameLayer* layer
     activateForTrajectory(object, player);
 }
 
+bool shouldSkipTrajectoryObject(GameObject* object) {
+    if (!object)
+        return true;
+
+    return object->m_objectType == GameObjectType::Decoration ||
+        object->m_objectType == GameObjectType::CollisionObject ||
+        object->m_objectType == GameObjectType::SecretCoin ||
+        object->m_objectType == GameObjectType::UserCoin ||
+        object->m_objectType == GameObjectType::Collectible ||
+        object->m_objectType == GameObjectType::EnterEffectObject ||
+        object->m_objectID == 286 ||
+        object->m_objectID == 287 ||
+        object->m_isGroupDisabled ||
+        object->m_isDisabled;
+}
+
+bool isSolidTrajectoryObject(GameObject* object) {
+    return object && (
+        object->m_objectType == GameObjectType::Solid ||
+        object->m_objectType == GameObjectType::Breakable
+    );
+}
+
+bool isHazardTrajectoryObject(GameObject* object) {
+    return object && (
+        object->m_objectType == GameObjectType::Hazard ||
+        object->m_objectType == GameObjectType::AnimatedHazard
+    );
+}
+
+bool trajectoryObjectIntersectsPlayer(
+    GJBaseGameLayer* layer,
+    PlayerObject* player,
+    GameObject* object,
+    cocos2d::CCRect const& playerRect
+) {
+    cocos2d::CCRect objectRect = object->m_objectType == GameObjectType::Slope ?
+        object->getObjectRect(2.f, 2.f) :
+        object->getObjectRect();
+
+    if (object->m_objectRadius <= 0.f) {
+        if (!playerRect.intersectsRect(objectRect))
+            return false;
+    } else if (!layer->playerCircleCollision(player, object)) {
+        return false;
+    }
+
+    if (!object->m_shouldUseOuterOb ||
+        (layer->m_levelSettings->m_fixRadiusCollision && object->m_objectRadius > 0.f)) {
+        return true;
+    }
+
+    OBB2D* objectBox = object->getOrientedBox();
+    player->updateOrientedBox();
+    OBB2D* playerBox = player->GameObject::getOrientedBox();
+    return objectBox && playerBox && objectBox->overlaps1Way(playerBox);
+}
+
+void handleSlopeCollisionForTrajectory(PlayerObject* player, GameObject* object, float dt) {
+    if (!player->m_isSideways) {
+        player->collidedWithSlopeInternal(dt, object, false);
+        return;
+    }
+
+    cocos2d::CCRect emptyRect = {0.f, 0.f, 0.f, 0.f};
+    player->handleRotatedCollisionInternal(dt, object, emptyRect, false, false, true);
+}
+
+bool handleGravityPadForTrajectory(GJBaseGameLayer* layer, PlayerObject* player, GameObject* object, EffectGameObject* effect) {
+    bool facingDown = player->m_isSideways ? object->isFacingLeft() : object->isFacingDown();
+    if (player->m_isUpsideDown != facingDown || !layer->canBeActivatedByPlayer(player, effect))
+        return false;
+
+    if (effect->m_isReverse)
+        player->reversePlayer(effect);
+    rememberPortalActivation(player, effect);
+    propellPlayerForTrajectory(player, 0.8f, true, static_cast<int>(GameObjectType::GravityPad));
+    flipGravityForTrajectory(player, !facingDown);
+    player->m_padRingRelated = true;
+    return true;
+}
+
+bool handleSizePortalForTrajectory(GJBaseGameLayer* layer, PlayerObject* player, EffectGameObject* effect, bool smallSize) {
+    if (!layer->canBeActivatedByPlayer(player, effect))
+        return false;
+
+    rememberPortalActivation(player, effect);
+    togglePlayerScaleForTrajectory(player, smallSize);
+    return true;
+}
+
+bool handleSpecialObjectForTrajectory(PlayerObject* player, GameObject* object) {
+    if (object->m_objectID == 0x743)
+        player->m_stateHitHead = 2;
+    else if (object->m_objectID == 0x6db)
+        player->m_stateDartSlide = 2;
+    else if (object->m_objectID == 0x715)
+        player->m_stateNoAutoJump = 2;
+    else if (object->m_objectID == 0x725 && player->m_isDashing) {
+        stopDashingForTrajectory(player);
+        player->m_jumpBuffered = false;
+    } else if (object->m_objectID == 0xb32)
+        player->m_stateFlipGravity = 2;
+    else if (object->m_objectID == 2069 || object->m_objectID == 3645) {
+        player->m_stateForce = 2;
+        auto* forceBlock = typeinfo_cast<ForceBlockGameObject*>(object);
+        if (!forceBlock)
+            return false;
+
+        int forceID = forceBlock->m_forceID;
+        if (forceID > 0) {
+            if (player->m_jumpPadRelated.contains(forceID) &&
+                player->m_jumpPadRelated.at(forceID)) {
+                return false;
+            }
+            player->m_jumpPadRelated.insert({forceID, true});
+        }
+        player->m_stateForceVector += forceBlock->calculateForceToTarget(player);
+    }
+
+    return false;
+}
+
+bool handleEffectCollisionForTrajectory(
+    GJBaseGameLayer* layer,
+    PlayerObject* player,
+    GameObject* object,
+    EffectGameObject* effect
+) {
+    switch (object->m_objectType) {
+    case GameObjectType::InverseGravityPortal:
+        rememberPortalActivation(player, effect);
+        flipGravityForTrajectory(player, true);
+        return true;
+    case GameObjectType::NormalGravityPortal:
+        rememberPortalActivation(player, effect);
+        flipGravityForTrajectory(player, false);
+        return true;
+    case GameObjectType::GravityTogglePortal:
+        rememberPortalActivation(player, effect);
+        flipGravityForTrajectory(player, !player->m_isUpsideDown);
+        return true;
+    case GameObjectType::TeleportPortal:
+        if (layer->canBeActivatedByPlayer(player, effect)) {
+            if (auto* portal = typeinfo_cast<TeleportPortalObject*>(object))
+                teleportPlayerForTrajectory(layer, portal, player);
+            activateForTrajectory(effect, player);
+            return true;
+        }
+        break;
+    case GameObjectType::CustomRing:
+    case GameObjectType::DashRing:
+    case GameObjectType::DropRing:
+    case GameObjectType::GravityDashRing:
+    case GameObjectType::GravityRing:
+    case GameObjectType::GreenRing:
+    case GameObjectType::PinkJumpRing:
+    case GameObjectType::RedJumpRing:
+    case GameObjectType::SpiderOrb:
+    case GameObjectType::YellowJumpRing:
+    case GameObjectType::TeleportOrb:
+        if (auto* ring = typeinfo_cast<RingObject*>(object))
+            ringJumpForTrajectory(player, ring);
+        break;
+    case GameObjectType::YellowJumpPad:
+    case GameObjectType::PinkJumpPad:
+    case GameObjectType::RedJumpPad:
+    case GameObjectType::SpiderPad:
+        bumpPlayerForTrajectory(layer, player, effect);
+        return true;
+    case GameObjectType::GravityPad:
+        return handleGravityPadForTrajectory(layer, player, object, effect);
+    case GameObjectType::MiniSizePortal:
+        return handleSizePortalForTrajectory(layer, player, effect, true);
+    case GameObjectType::RegularSizePortal:
+        return handleSizePortalForTrajectory(layer, player, effect, false);
+    case GameObjectType::CubePortal:
+    case GameObjectType::ShipPortal:
+    case GameObjectType::BallPortal:
+    case GameObjectType::UfoPortal:
+    case GameObjectType::WavePortal:
+    case GameObjectType::SpiderPortal:
+    case GameObjectType::SwingPortal:
+    case GameObjectType::RobotPortal:
+        activatePortalForTrajectory(layer, player, effect);
+        return true;
+    case GameObjectType::Special:
+        return handleSpecialObjectForTrajectory(player, object);
+    case GameObjectType::EnterEffectObject:
+    case GameObjectType::Modifier:
+        ShowTrajectory::snapshotObject(effect);
+        effect->activatedByPlayer(player);
+        if (effect->m_isTouchTriggered)
+            triggerObjectForTrajectory(effect, layer, player);
+        break;
+    default:
+        break;
+    }
+
+    return false;
+}
+
 void queueCollisionObject(gd::vector<GameObject*>& objects, int& count, int& capacity, GameObject* object) {
     if (count < capacity)
         objects.at(count) = object;
@@ -1130,24 +1353,10 @@ void collisionCheckObjectsForTrajectory(
     cocos2d::CCRect playerRect = refreshPlayerRect();
     for (int i = 0; i < objectCount; i++) {
         GameObject* object = objects->at(i);
-        if (!object)
+        if (shouldSkipTrajectoryObject(object))
             continue;
 
-        if (object->m_objectType == GameObjectType::Decoration ||
-            object->m_objectType == GameObjectType::CollisionObject ||
-            object->m_objectType == GameObjectType::SecretCoin ||
-            object->m_objectType == GameObjectType::UserCoin ||
-            object->m_objectType == GameObjectType::Collectible ||
-            object->m_objectType == GameObjectType::EnterEffectObject ||
-            object->m_objectID == 286 ||
-            object->m_objectID == 287 ||
-            object->m_isGroupDisabled ||
-            object->m_isDisabled) {
-            continue;
-        }
-
-        if (object->m_objectType == GameObjectType::Solid ||
-            object->m_objectType == GameObjectType::Breakable) {
+        if (isSolidTrajectoryObject(object)) {
             queueCollisionObject(
                 layer->m_solidCollisionObjects,
                 layer->m_solidCollisionObjectsCount,
@@ -1160,8 +1369,7 @@ void collisionCheckObjectsForTrajectory(
         if (object == layer->m_anticheatSpike)
             continue;
 
-        if (object->m_objectType == GameObjectType::Hazard ||
-            object->m_objectType == GameObjectType::AnimatedHazard) {
+        if (isHazardTrajectoryObject(object)) {
             queueCollisionObject(
                 layer->m_hazardCollisionObjects,
                 layer->m_hazardCollisionObjectsCount,
@@ -1171,35 +1379,11 @@ void collisionCheckObjectsForTrajectory(
             continue;
         }
 
-        cocos2d::CCRect objectRect = object->m_objectType == GameObjectType::Slope ?
-            object->getObjectRect(2.f, 2.f) :
-            object->getObjectRect();
-
-        if (object->m_objectRadius <= 0.f) {
-            if (!playerRect.intersectsRect(objectRect))
-                continue;
-        } else if (!layer->playerCircleCollision(player, object)) {
-            continue;
-        }
-
-        bool overlaps = true;
-        if (object->m_shouldUseOuterOb &&
-            (!layer->m_levelSettings->m_fixRadiusCollision || object->m_objectRadius <= 0.f)) {
-            OBB2D* box = object->getOrientedBox();
-            player->updateOrientedBox();
-            OBB2D* playerBox = player->GameObject::getOrientedBox();
-            overlaps = box && playerBox && box->overlaps1Way(playerBox);
-        }
-        if (!overlaps)
+        if (!trajectoryObjectIntersectsPlayer(layer, player, object, playerRect))
             continue;
 
         if (object->m_objectType == GameObjectType::Slope) {
-            if (!player->m_isSideways)
-                player->collidedWithSlopeInternal(dt, object, false);
-            else {
-                cocos2d::CCRect emptyRect = {0.f, 0.f, 0.f, 0.f};
-                player->handleRotatedCollisionInternal(dt, object, emptyRect, false, false, true);
-            }
+            handleSlopeCollisionForTrajectory(player, object, dt);
             playerRect = refreshPlayerRect();
             continue;
         }
@@ -1208,144 +1392,11 @@ void collisionCheckObjectsForTrajectory(
         if (!effect)
             continue;
 
-        if (ShowTrajectory::hasActivated(player, effect) ||
-            ShowTrajectory::realPlayerHasActivated(player, effect)) {
+        if (hasTrajectoryActivatedObject(player, effect))
             continue;
-        }
 
-        switch (object->m_objectType) {
-        case GameObjectType::InverseGravityPortal:
-            player->m_lastPortalPos = object->getPosition();
-            player->m_lastActivatedPortal = object;
-            activateForTrajectory(effect, player);
-            flipGravityForTrajectory(player, true);
+        if (handleEffectCollisionForTrajectory(layer, player, object, effect))
             playerRect = refreshPlayerRect();
-            break;
-        case GameObjectType::NormalGravityPortal:
-            player->m_lastPortalPos = object->getPosition();
-            player->m_lastActivatedPortal = object;
-            activateForTrajectory(effect, player);
-            flipGravityForTrajectory(player, false);
-            playerRect = refreshPlayerRect();
-            break;
-        case GameObjectType::GravityTogglePortal:
-            player->m_lastPortalPos = object->getPosition();
-            player->m_lastActivatedPortal = object;
-            activateForTrajectory(effect, player);
-            flipGravityForTrajectory(player, !player->m_isUpsideDown);
-            playerRect = refreshPlayerRect();
-            break;
-        case GameObjectType::TeleportPortal:
-            if (layer->canBeActivatedByPlayer(player, effect)) {
-                if (auto* portal = typeinfo_cast<TeleportPortalObject*>(object))
-                    teleportPlayerForTrajectory(layer, portal, player);
-                activateForTrajectory(effect, player);
-                playerRect = refreshPlayerRect();
-            }
-            break;
-        case GameObjectType::CustomRing:
-        case GameObjectType::DashRing:
-        case GameObjectType::DropRing:
-        case GameObjectType::GravityDashRing:
-        case GameObjectType::GravityRing:
-        case GameObjectType::GreenRing:
-        case GameObjectType::PinkJumpRing:
-        case GameObjectType::RedJumpRing:
-        case GameObjectType::SpiderOrb:
-        case GameObjectType::YellowJumpRing:
-        case GameObjectType::TeleportOrb:
-            if (auto* ring = typeinfo_cast<RingObject*>(object))
-                ringJumpForTrajectory(player, ring);
-            break;
-        case GameObjectType::YellowJumpPad:
-        case GameObjectType::PinkJumpPad:
-        case GameObjectType::RedJumpPad:
-        case GameObjectType::SpiderPad:
-            bumpPlayerForTrajectory(layer, player, effect);
-            playerRect = refreshPlayerRect();
-            break;
-        case GameObjectType::GravityPad: {
-            bool facingDown = player->m_isSideways ? object->isFacingLeft() : object->isFacingDown();
-            if (player->m_isUpsideDown == facingDown && layer->canBeActivatedByPlayer(player, effect)) {
-                if (effect->m_isReverse)
-                    player->reversePlayer(effect);
-                player->m_lastPortalPos = object->getPosition();
-                player->m_lastActivatedPortal = object;
-                activateForTrajectory(effect, player);
-                propellPlayerForTrajectory(player, 0.8f, true, static_cast<int>(GameObjectType::GravityPad));
-                flipGravityForTrajectory(player, !facingDown);
-                player->m_padRingRelated = true;
-                playerRect = refreshPlayerRect();
-            }
-            break;
-        }
-        case GameObjectType::MiniSizePortal:
-            if (layer->canBeActivatedByPlayer(player, effect)) {
-                player->m_lastPortalPos = object->getPosition();
-                player->m_lastActivatedPortal = object;
-                activateForTrajectory(effect, player);
-                togglePlayerScaleForTrajectory(player, true);
-                playerRect = refreshPlayerRect();
-            }
-            break;
-        case GameObjectType::RegularSizePortal:
-            if (layer->canBeActivatedByPlayer(player, effect)) {
-                player->m_lastPortalPos = object->getPosition();
-                player->m_lastActivatedPortal = object;
-                activateForTrajectory(effect, player);
-                togglePlayerScaleForTrajectory(player, false);
-                playerRect = refreshPlayerRect();
-            }
-            break;
-        case GameObjectType::CubePortal:
-        case GameObjectType::ShipPortal:
-        case GameObjectType::BallPortal:
-        case GameObjectType::UfoPortal:
-        case GameObjectType::WavePortal:
-        case GameObjectType::SpiderPortal:
-        case GameObjectType::SwingPortal:
-        case GameObjectType::RobotPortal:
-            activatePortalForTrajectory(layer, player, effect);
-            playerRect = refreshPlayerRect();
-            break;
-        case GameObjectType::Special:
-            if (object->m_objectID == 0x743)
-                player->m_stateHitHead = 2;
-            else if (object->m_objectID == 0x6db)
-                player->m_stateDartSlide = 2;
-            else if (object->m_objectID == 0x715)
-                player->m_stateNoAutoJump = 2;
-            else if (object->m_objectID == 0x725 && player->m_isDashing) {
-                stopDashingForTrajectory(player);
-                player->m_jumpBuffered = false;
-            } else if (object->m_objectID == 0xb32)
-                player->m_stateFlipGravity = 2;
-            else if (object->m_objectID == 2069 || object->m_objectID == 3645) {
-                player->m_stateForce = 2;
-                auto* forceBlock = typeinfo_cast<ForceBlockGameObject*>(object);
-                if (!forceBlock)
-                    break;
-                int forceID = forceBlock->m_forceID;
-                if (forceID > 0) {
-                    if (player->m_jumpPadRelated.contains(forceID) &&
-                        player->m_jumpPadRelated.at(forceID)) {
-                        break;
-                    }
-                    player->m_jumpPadRelated.insert({forceID, true});
-                }
-                player->m_stateForceVector += forceBlock->calculateForceToTarget(player);
-            }
-            break;
-        case GameObjectType::EnterEffectObject:
-        case GameObjectType::Modifier:
-            ShowTrajectory::snapshotObject(effect);
-            effect->activatedByPlayer(player);
-            if (effect->m_isTouchTriggered)
-                triggerObjectForTrajectory(effect, layer, player);
-            break;
-        default:
-            break;
-        }
     }
 }
 
@@ -1401,6 +1452,7 @@ void checkSpawnObjectsForTrajectory(GJBaseGameLayer* layer, PlayerObject* player
     }
 }
 
+
 bool stepSimulationFrame(
     PlayLayer* pl,
     PlayerObject* mainPlayer,
@@ -1452,31 +1504,31 @@ bool stepSimulationFrame(
 
 void drawStoredHitbox(ShowTrajectory::PredictionResult const& prediction, cocos2d::CCDrawNode* drawNode);
 
-ShowTrajectory::BranchResult runBranch(
+ShowTrajectory::BranchResult runPredictionBranch(
     PlayLayer* pl,
-    bool player1,
+    bool primaryPlayer,
     int mode,
     bool simulateBothPlayers,
     ShowTrajectory::PredictionConfig config
 ) {
     ShowTrajectory::BranchResult branch;
-    branch.prediction.player1 = player1;
+    branch.prediction.player1 = primaryPlayer;
     branch.prediction.holding = (mode & ShowTrajectory::Hold) != 0;
     if (!pl)
         return branch;
 
-    PlayerObject* fakePlayer = ShowTrajectory::fakePlayer(player1);
-    PlayerObject* realPlayer = player1 ? pl->m_player1 : pl->m_player2;
-    PlayerObject* otherFake = ShowTrajectory::fakePlayer(!player1);
-    PlayerObject* otherReal = player1 ? pl->m_player2 : pl->m_player1;
-    if (!fakePlayer || !realPlayer)
+    PlayerObject* predictionPlayer = ShowTrajectory::fakePlayer(primaryPlayer);
+    PlayerObject* sourcePlayer = primaryPlayer ? pl->m_player1 : pl->m_player2;
+    PlayerObject* otherPredictionPlayer = ShowTrajectory::fakePlayer(!primaryPlayer);
+    PlayerObject* otherSourcePlayer = primaryPlayer ? pl->m_player2 : pl->m_player1;
+    if (!predictionPlayer || !sourcePlayer)
         return branch;
 
     LayerStateGuard state(pl);
 
-    resetFakePlayerFrom(realPlayer, fakePlayer);
-    if (simulateBothPlayers && otherFake && otherReal)
-        resetFakePlayerFrom(otherReal, otherFake);
+    resetFakePlayerFrom(sourcePlayer, predictionPlayer);
+    if (simulateBothPlayers && otherPredictionPlayer && otherSourcePlayer)
+        resetFakePlayerFrom(otherSourcePlayer, otherPredictionPlayer);
 
     auto& t = trajectory();
     t.cancelTrajectory = false;
@@ -1502,16 +1554,18 @@ ShowTrajectory::BranchResult runBranch(
 
     uint64_t startFrame = static_cast<uint64_t>(Bot::getCurrentFrame());
     if (!applyReplayInputs) {
-        cocos2d::CCPoint initialMain = fakePlayer->getPosition();
-        cocos2d::CCPoint initialOther = otherFake ? otherFake->getPosition() : cocos2d::CCPoint{};
+        cocos2d::CCPoint initialMainPosition = predictionPlayer->getPosition();
+        cocos2d::CCPoint initialOtherPosition = otherPredictionPlayer ?
+            otherPredictionPlayer->getPosition() :
+            cocos2d::CCPoint{};
 
-        applyInitialInput(pl, fakePlayer, realPlayer, mode);
+        applyInitialInput(pl, predictionPlayer, sourcePlayer, mode);
         if (mode != 0)
-            drawPredictionSegment(drawNode, fakePlayer, initialMain, width, color);
+            drawPredictionSegment(drawNode, predictionPlayer, initialMainPosition, width, color);
 
-        if (mode != 0 && simulateBothPlayers && otherFake && otherReal) {
-            applyInitialInput(pl, otherFake, otherReal, mode);
-            drawPredictionSegment(drawNode, otherFake, initialOther, width, otherColor);
+        if (mode != 0 && simulateBothPlayers && otherPredictionPlayer && otherSourcePlayer) {
+            applyInitialInput(pl, otherPredictionPlayer, otherSourcePlayer, mode);
+            drawPredictionSegment(drawNode, otherPredictionPlayer, initialOtherPosition, width, otherColor);
         }
     }
 
@@ -1533,8 +1587,8 @@ ShowTrajectory::BranchResult runBranch(
 
         branch.stopped = stepSimulationFrame(
             pl,
-            fakePlayer,
-            otherFake,
+            predictionPlayer,
+            otherPredictionPlayer,
             simulateBothPlayers,
             branch,
             drawNode,
@@ -1547,39 +1601,67 @@ ShowTrajectory::BranchResult runBranch(
             break;
     }
 
-    t.m_deathRotation = fakePlayer->getRotation();
-    branch.prediction.position = fakePlayer->getPosition();
-    branch.prediction.hitbox = fakePlayer->getObjectRect();
-    branch.prediction.innerHitbox = fakePlayer->getObjectRect(0.3, 0.3);
-    branch.prediction.rotation = fakePlayer->getRotation();
+    t.m_deathRotation = predictionPlayer->getRotation();
+    branch.prediction.position = predictionPlayer->getPosition();
+    branch.prediction.hitbox = predictionPlayer->getObjectRect();
+    branch.prediction.innerHitbox = predictionPlayer->getObjectRect(0.3, 0.3);
+    branch.prediction.rotation = predictionPlayer->getRotation();
     branch.hasHitbox = true;
     if (drawNode)
         drawStoredHitbox(branch.prediction, drawNode);
-    ShowTrajectory::hideFakePlayer(fakePlayer);
-    if (otherFake)
-        ShowTrajectory::hideFakePlayer(otherFake);
+    ShowTrajectory::hideFakePlayer(predictionPlayer);
+    if (otherPredictionPlayer)
+        ShowTrajectory::hideFakePlayer(otherPredictionPlayer);
 
     return branch;
 }
 
+void runPredictionBranchesForPlayer(
+    PlayLayer* pl,
+    bool primaryPlayer,
+    bool simulateBothPlayers,
+    bool includePlatformerDirections
+) {
+    ShowTrajectory::PredictionConfig config;
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Hold, simulateBothPlayers, config);
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Swift, simulateBothPlayers, config);
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Release, simulateBothPlayers, config);
+
+    if (!includePlatformerDirections)
+        return;
+
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Hold | ShowTrajectory::Left, simulateBothPlayers, config);
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Swift | ShowTrajectory::Left, simulateBothPlayers, config);
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Release | ShowTrajectory::Left, simulateBothPlayers, config);
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Hold | ShowTrajectory::Right, simulateBothPlayers, config);
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Swift | ShowTrajectory::Right, simulateBothPlayers, config);
+    runPredictionBranch(pl, primaryPlayer, ShowTrajectory::Release | ShowTrajectory::Right, simulateBothPlayers, config);
+}
+
+std::vector<cocos2d::CCPoint> rectVertices(cocos2d::CCRect rect) {
+    return {
+        {rect.getMinX(), rect.getMaxY()},
+        {rect.getMaxX(), rect.getMaxY()},
+        {rect.getMaxX(), rect.getMinY()},
+        {rect.getMinX(), rect.getMinY()},
+    };
+}
+
+void rotateVertices(std::vector<cocos2d::CCPoint>& vertices, cocos2d::CCPoint center, float rotation) {
+    float angle = CC_DEGREES_TO_RADIANS(rotation * -1.f);
+    for (auto& vertex : vertices) {
+        float x = vertex.x - center.x;
+        float y = vertex.y - center.y;
+        vertex.x = center.x + (x * std::cos(angle)) - (y * std::sin(angle));
+        vertex.y = center.y + (x * std::sin(angle)) + (y * std::cos(angle));
+    }
+}
+
 void drawStoredHitbox(ShowTrajectory::PredictionResult const& prediction, cocos2d::CCDrawNode* drawNode) {
     auto drawRect = [&](cocos2d::CCRect rect, float rotation, cocos2d::ccColor4F fill, cocos2d::ccColor4F outline, float width) {
-        std::vector<cocos2d::CCPoint> vertices = {
-            {rect.getMinX(), rect.getMaxY()},
-            {rect.getMaxX(), rect.getMaxY()},
-            {rect.getMaxX(), rect.getMinY()},
-            {rect.getMinX(), rect.getMinY()},
-        };
-
+        auto vertices = rectVertices(rect);
         cocos2d::CCPoint center = {rect.getMidX(), rect.getMidY()};
-        float angle = CC_DEGREES_TO_RADIANS(rotation * -1.f);
-        for (auto& vertex : vertices) {
-            float x = vertex.x - center.x;
-            float y = vertex.y - center.y;
-            vertex.x = center.x + (x * std::cos(angle)) - (y * std::sin(angle));
-            vertex.y = center.y + (x * std::sin(angle)) + (y * std::cos(angle));
-        }
-
+        rotateVertices(vertices, center, rotation);
         drawNode->drawPolygon(vertices.data(), vertices.size(), fill, width, outline);
     };
 
@@ -1647,7 +1729,7 @@ ShowTrajectory::PredictionResult ShowTrajectory::simulate(
                 node->setVisible(true);
             }
         }
-        auto branch = runBranch(pl, player1, mode, canSimulateBoth, config);
+        auto branch = runPredictionBranch(pl, player1, mode, canSimulateBoth, config);
         result = branch.prediction;
     }
 
@@ -1682,44 +1764,27 @@ void ShowTrajectory::updateTrajectory(PlayLayer* pl) {
     t.creatingTrajectory = true;
     bot.creatingTrajectory = true;
 
-    auto addBranch = [&](bool player1, int mode, bool simulateBoth) {
-        PredictionConfig config;
-        runBranch(pl, player1, mode, simulateBoth, config);
-    };
-
     if (ensureFakePlayer(pl, true)) {
         bool simulateBoth = pl->m_gameState.m_isDualMode && !pl->m_levelSettings->m_twoPlayerMode;
         if (simulateBoth && pl->m_player2)
             ensureFakePlayer(pl, false);
 
-        addBranch(true, Hold, simulateBoth);
-        addBranch(true, Swift, simulateBoth);
-        addBranch(true, Release, simulateBoth);
-
-        if (pl->m_levelSettings->m_platformerMode && platformerBothSides) {
-            addBranch(true, Hold | Left, simulateBoth);
-            addBranch(true, Swift | Left, simulateBoth);
-            addBranch(true, Release | Left, simulateBoth);
-            addBranch(true, Hold | Right, simulateBoth);
-            addBranch(true, Swift | Right, simulateBoth);
-            addBranch(true, Release | Right, simulateBoth);
-        }
+        runPredictionBranchesForPlayer(
+            pl,
+            true,
+            simulateBoth,
+            pl->m_levelSettings->m_platformerMode && platformerBothSides
+        );
     }
 
     if (pl->m_player2 && pl->m_gameState.m_isDualMode && pl->m_levelSettings->m_twoPlayerMode) {
         if (ensureFakePlayer(pl, false)) {
-            addBranch(false, Hold, false);
-            addBranch(false, Swift, false);
-            addBranch(false, Release, false);
-
-            if (pl->m_levelSettings->m_platformerMode && platformerBothSides) {
-                addBranch(false, Hold | Left, false);
-                addBranch(false, Swift | Left, false);
-                addBranch(false, Release | Left, false);
-                addBranch(false, Hold | Right, false);
-                addBranch(false, Swift | Right, false);
-                addBranch(false, Release | Right, false);
-            }
+            runPredictionBranchesForPlayer(
+                pl,
+                false,
+                false,
+                pl->m_levelSettings->m_platformerMode && platformerBothSides
+            );
         }
     }
 
@@ -1929,13 +1994,7 @@ std::vector<cocos2d::CCPoint> ShowTrajectory::getVertices(
     cocos2d::CCRect rect,
     float rotation
 ) {
-    std::vector<cocos2d::CCPoint> vertices = {
-        {rect.getMinX(), rect.getMaxY()},
-        {rect.getMaxX(), rect.getMaxY()},
-        {rect.getMaxX(), rect.getMinY()},
-        {rect.getMinX(), rect.getMinY()},
-    };
-
+    auto vertices = rectVertices(rect);
     cocos2d::CCPoint center = {rect.getMidX(), rect.getMidY()};
     float size = static_cast<int>(rect.getMaxX() - rect.getMinX());
 
@@ -1960,14 +2019,7 @@ std::vector<cocos2d::CCPoint> ShowTrajectory::getVertices(
         }
     }
 
-    float angle = CC_DEGREES_TO_RADIANS(rotation * -1.f);
-    for (auto& vertex : vertices) {
-        float x = vertex.x - center.x;
-        float y = vertex.y - center.y;
-        vertex.x = center.x + (x * std::cos(angle)) - (y * std::sin(angle));
-        vertex.y = center.y + (x * std::sin(angle)) + (y * std::cos(angle));
-    }
-
+    rotateVertices(vertices, center, rotation);
     return vertices;
 }
 
