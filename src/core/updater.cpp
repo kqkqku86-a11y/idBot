@@ -1,7 +1,7 @@
 #include "updater.hpp"
 
 #include "bot.hpp"
-#include "../hacks/show_trajectory.hpp"
+#include "../trajectory/trajectory.hpp"
 #include "../practice_fixes/practice_fixes.hpp"
 
 #include <Geode/Prelude.hpp>
@@ -128,6 +128,16 @@ void BotUpdater::resetStepState() {
 
 void BotUpdater::runScheduler(float dt, SchedulerUpdate const& update) {
     auto& bot = Bot::get();
+    auto finishTrajectoryUpdate = [&]() {
+        auto* playLayer = PlayLayer::get();
+        if (!playLayer)
+            return;
+
+        if (bot.showTrajectory)
+            ShowTrajectory::updateTrajectory(playLayer);
+        else
+            ShowTrajectory::clearTrajectory();
+    };
 
     if (updating)
         return update(dt);
@@ -136,12 +146,11 @@ void BotUpdater::runScheduler(float dt, SchedulerUpdate const& update) {
         bot.setTpsEnabled(true);
 
     if (bot.state == state::none && !bot.speedhackEnabled && !bot.tpsEnabled && !bot.lockDelta &&
-        !bot.frameStepper) {
+        !bot.frameStepper && !bot.showTrajectory) {
         if (bot.currentPitch != 1.f)
             Bot::updatePitch(1.f);
 
         update(dt);
-        ShowTrajectory::refreshIfNeeded();
         return;
     }
 
@@ -150,7 +159,7 @@ void BotUpdater::runScheduler(float dt, SchedulerUpdate const& update) {
             Bot::updatePitch(1.f);
 
         update(dt);
-        ShowTrajectory::refreshIfNeeded();
+        finishTrajectoryUpdate();
         return;
     }
 
@@ -159,10 +168,16 @@ void BotUpdater::runScheduler(float dt, SchedulerUpdate const& update) {
         bot.safeMode = true;
 
     auto* pl = PlayLayer::get();
-    if (!pl || pl->m_isPaused) {
+    if (!pl) {
         resetStepState();
         update(dt * speedhack);
-        ShowTrajectory::refreshIfNeeded();
+        return;
+    }
+
+    if (pl->m_isPaused) {
+        resetStepState();
+        update(dt * speedhack);
+        finishTrajectoryUpdate();
         return;
     }
 
@@ -188,7 +203,7 @@ void BotUpdater::runScheduler(float dt, SchedulerUpdate const& update) {
             stepCount = 1;
             frozenUpdate = false;
             updating = false;
-            ShowTrajectory::refreshIfNeeded();
+            finishTrajectoryUpdate();
             return;
         }
 
@@ -199,16 +214,16 @@ void BotUpdater::runScheduler(float dt, SchedulerUpdate const& update) {
         update(static_cast<float>(timestep));
         stepCount = 1;
         updating = false;
+        finishTrajectoryUpdate();
         PracticeFix::saveFrameStepperFrame();
         Bot::syncFrameStepperMusic();
-        ShowTrajectory::refreshIfNeeded();
         return;
     }
 
     if (!bot.lockDelta) {
         resetStepState();
         update(dt * speedhack);
-        ShowTrajectory::refreshIfNeeded();
+        finishTrajectoryUpdate();
         return;
     }
 
@@ -229,7 +244,7 @@ void BotUpdater::runScheduler(float dt, SchedulerUpdate const& update) {
         steps = std::min(steps, stepLimit);
 
     if (steps <= 0) {
-        ShowTrajectory::refreshIfNeeded();
+        finishTrajectoryUpdate();
         return;
     }
 
@@ -255,7 +270,7 @@ void BotUpdater::runScheduler(float dt, SchedulerUpdate const& update) {
     }
 
     updating = false;
-    ShowTrajectory::refreshIfNeeded();
+    finishTrajectoryUpdate();
 }
 
 class $modify(CCScheduler) {

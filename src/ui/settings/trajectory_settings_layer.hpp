@@ -1,4 +1,4 @@
-#include "../../hacks/show_trajectory.hpp"
+#include "../../trajectory/trajectory.hpp"
 
 #include "../../core/bot.hpp"
 

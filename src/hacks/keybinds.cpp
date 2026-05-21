@@ -1,4 +1,4 @@
-#include "show_trajectory.hpp"
+#include "../trajectory/trajectory.hpp"
 #include "../core/bot.hpp"
 #include "../ui/layers/record_layer.hpp"
 
@@ -94,7 +94,7 @@ void handleKeybind(std::string_view id, bool down, bool repeat, double time) {
                     layer->trajectoryToggle->toggle(newState);
             }
             if (!newState)
-                ShowTrajectory::trajectoryOff();
+                ShowTrajectory::clearTrajectory();
         };
 
         #ifndef GEODE_IS_IOS

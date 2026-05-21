@@ -1,6 +1,7 @@
 #include "../bot.hpp"
 
 #include "../../practice_fixes/practice_fixes.hpp"
+#include "../../trajectory/trajectory.hpp"
 #include "../../ui/layers/record_layer.hpp"
 
 #include <Geode/modify/GJBaseGameLayer.hpp>
@@ -99,7 +100,7 @@ class $modify(PlayLayer) {
 
         if (!m_player1 || !m_player2)
             return PlayLayer::pauseGame(b1);
-        if (bot.state != state::recording)
+        if (bot.state != state::recording && bot.state != state::playing)
             return PlayLayer::pauseGame(b1);
 
         bot.ignoreRecordAction = true;

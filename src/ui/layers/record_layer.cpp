@@ -3,7 +3,7 @@
 #include "../../core/bot_incompat.hpp"
 #include "../../core/bot.hpp"
 #include "../../hacks/coin_finder.hpp"
-#include "../../hacks/show_trajectory.hpp"
+#include "../../trajectory/trajectory.hpp"
 #include "../game/game_ui.hpp"
 #include "../macro/macro_editor.hpp"
 #include "../settings/autoclicker_settings_layer.hpp"
@@ -498,7 +498,7 @@ void RecordLayer::toggleSetting(CCObject *obj) {
     if (id == "macro_show_trajectory") {
         bot.showTrajectory = value;
         if (!value)
-            ShowTrajectory::trajectoryOff();
+            ShowTrajectory::clearTrajectory();
     }
 
     if (id == "macro_coin_finder") {
@@ -510,7 +510,7 @@ void RecordLayer::toggleSetting(CCObject *obj) {
     if (id == "macro_show_trajectory") {
         bot.showTrajectory = value;
         if (!value)
-            ShowTrajectory::trajectoryOff();
+            ShowTrajectory::clearTrajectory();
     }
 
     if (id == "macro_show_frame_label") {
