@@ -310,6 +310,19 @@ void applyInitialInput(PlayLayer* pl, PlayerObject* player, PlayerObject* realPl
     }
 }
 
+void drawPredictionSegment(
+    cocos2d::CCDrawNode* drawNode,
+    PlayerObject* player,
+    cocos2d::CCPoint from,
+    float width,
+    cocos2d::ccColor4F color
+) {
+    if (!drawNode || !player)
+        return;
+
+    drawNode->drawSegment(from, player->getPosition(), width, color);
+}
+
 void resetFakePlayerFrom(PlayerObject* realPlayer, PlayerObject* fakePlayer) {
     if (!realPlayer || !fakePlayer)
         return;
@@ -372,7 +385,7 @@ void spiderTestJumpForTrajectory(PlayerObject* player) {
 
     bool reducedEffects = player->m_maybeReducedEffects;
     player->m_maybeReducedEffects = false;
-    player->spiderTestJumpInternal(false);
+    player->spiderTestJump(false);
     player->m_maybeReducedEffects = reducedEffects;
 }
 
@@ -908,7 +921,6 @@ void teleportPlayerForTrajectory(GJBaseGameLayer* layer, TeleportPortalObject* o
         return;
 
     player->m_wasTeleported = true;
-
     if (object->m_orangePortal) {
         cocos2d::CCPoint bluePortalStartPos = object->getStartPos();
         cocos2d::CCPoint orangePortalStartPos = object->m_orangePortal->getStartPos();
@@ -1428,15 +1440,11 @@ bool stepSimulationFrame(
     if (pl->m_effectManager)
         pl->m_effectManager->postCollisionCheck();
 
-    if (!ShowTrajectory::fakePlayerDead(mainPlayer)) {
-        if (drawNode)
-            drawNode->drawSegment(prevMain, mainPlayer->getPosition(), width, color);
-    }
+    if (!ShowTrajectory::fakePlayerDead(mainPlayer))
+        drawPredictionSegment(drawNode, mainPlayer, prevMain, width, color);
 
-    if (simulateBothPlayers && otherPlayer && !ShowTrajectory::fakePlayerDead(otherPlayer)) {
-        if (drawNode)
-            drawNode->drawSegment(prevOther, otherPlayer->getPosition(), width, otherColor);
-    }
+    if (simulateBothPlayers && otherPlayer && !ShowTrajectory::fakePlayerDead(otherPlayer))
+        drawPredictionSegment(drawNode, otherPlayer, prevOther, width, otherColor);
 
     return ShowTrajectory::fakePlayerDead(mainPlayer) &&
         (!simulateBothPlayers || !otherPlayer || ShowTrajectory::fakePlayerDead(otherPlayer));
@@ -1494,9 +1502,17 @@ ShowTrajectory::BranchResult runBranch(
 
     uint64_t startFrame = static_cast<uint64_t>(Bot::getCurrentFrame());
     if (!applyReplayInputs) {
+        cocos2d::CCPoint initialMain = fakePlayer->getPosition();
+        cocos2d::CCPoint initialOther = otherFake ? otherFake->getPosition() : cocos2d::CCPoint{};
+
         applyInitialInput(pl, fakePlayer, realPlayer, mode);
-        if (mode != 0 && simulateBothPlayers && otherFake && otherReal)
+        if (mode != 0)
+            drawPredictionSegment(drawNode, fakePlayer, initialMain, width, color);
+
+        if (mode != 0 && simulateBothPlayers && otherFake && otherReal) {
             applyInitialInput(pl, otherFake, otherReal, mode);
+            drawPredictionSegment(drawNode, otherFake, initialOther, width, otherColor);
+        }
     }
 
     for (int i = 0; i < predictionLength; i++) {
