@@ -357,11 +357,23 @@ void updateFakePlayer(PlayerObject* player, float delta) {
 
     clearCollisionLogs(player);
     player->m_playEffects = false;
-    player->m_maybeReducedEffects = true;
+    bool reducedEffects = player->m_maybeReducedEffects;
+    player->m_maybeReducedEffects = false;
     player->update(delta);
+    player->m_maybeReducedEffects = reducedEffects;
     player->m_unkUnused3 = player->getRotation();
     player->updateRotation(delta);
     player->m_shipRotation = player->getPosition();
+}
+
+void spiderTestJumpForTrajectory(PlayerObject* player) {
+    if (!player)
+        return;
+
+    bool reducedEffects = player->m_maybeReducedEffects;
+    player->m_maybeReducedEffects = false;
+    player->spiderTestJumpInternal(false);
+    player->m_maybeReducedEffects = reducedEffects;
 }
 
 bool isTrajectorySpawnObject(EffectGameObject* object) {
@@ -492,7 +504,7 @@ void bumpFakePlayerForTrajectory(
             flipGravityForTrajectory(player, !player->m_isUpsideDown);
     }
 
-    player->spiderTestJumpInternal(false);
+    spiderTestJumpForTrajectory(player);
 }
 
 void startDashingForTrajectory(PlayerObject* player, DashRingObject* ring) {
@@ -760,7 +772,7 @@ void ringJumpForTrajectory(PlayerObject* player, RingObject* ring) {
         bool facing = player->m_isSideways ? ring->isFacingLeft() : ring->isFacingDown();
         if (facing != player->m_isUpsideDown)
             flipGravityForTrajectory(player, !player->m_isUpsideDown);
-        player->spiderTestJumpInternal(false);
+        spiderTestJumpForTrajectory(player);
         return;
     }
 
