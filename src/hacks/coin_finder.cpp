@@ -1,5 +1,7 @@
 #include "coin_finder.hpp"
 
+#include "../core/bot.hpp"
+
 class $modify(PlayLayer) {
 
     struct Fields {
@@ -24,12 +26,12 @@ class $modify(PlayLayer) {
     void postUpdate(float dt) {
         PlayLayer::postUpdate(dt);
 
-        if (!Global::get().coinFinder) return;
+        if (!Bot::get().coinFinder) return;
 
         CoinFinder::drawNode()->clear();
         CoinFinder::drawNode()->setVisible(true);
 
-        Global::get().safeMode = true;
+        Bot::get().safeMode = true;
 
         for (GameObject* coin : m_fields->coins) {
             cocos2d::ccColor4F color = { 0.85f, 0.85f, 0.85f, 0.75f };

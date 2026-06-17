@@ -1,4 +1,7 @@
-#include "../includes.hpp"
+#pragma once
+
+#include <Geode/Geode.hpp>
+
 #include <Geode/modify/PlayLayer.hpp>
 
 class CoinFinderNode : public cocos2d::CCDrawNode {

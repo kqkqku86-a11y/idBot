@@ -1,34 +1,29 @@
-
 #pragma once
 
-#include "../includes.hpp"
+#include <Geode/Geode.hpp>
 
 class Utils {
 public:
-    static std::string toLower(std::string str);
-
+    /// @brief Get the creation time of the macro file
     static std::time_t getFileCreationTime(const std::filesystem::path& path);
 
+    /// @brief Formats a time_t as local time (YYYY-MM-DD HH:MM:SS)
     static std::string formatTime(std::time_t time);
 
+    /// @brief Getter for the background texture
     static std::string getTexture();
 
-    static std::string getSimplifiedString(std::string str);
+    /// @brief Helper to change the mod's background color
+    static void setBackgroundColor(geode::NineSlice* bg);
 
-    static void setBackgroundColor(cocos2d::extension::CCScale9Sprite* bg);
+    /// @brief Get PauseLayer from the scene
+    static PauseLayer* getPauseLayer();
 
-    static std::vector<std::string> splitByChar(std::string str, char splitChar);
-
-    static int copyFile(const std::string& sourcePath, const std::string& destinationPath);
-    
-    static std::string narrow(const wchar_t* str);
-    static inline auto narrow(const std::wstring& str) {
-        return narrow(str.c_str());
-    }
-
-    static std::wstring widen(const char* str);
-    static inline auto widen(const std::string& str) {
-        return widen(str.c_str());
-    }
-
+    /// @brief Sets text input enabled state
+    static void setTextInputEnabled(geode::TextInput* input, 
+        bool enabled, 
+        GLubyte enabledBg = 90,
+        GLubyte disabledBg = 30, 
+        GLubyte enabledText = 255, 
+        GLubyte disabledText = 100);
 };

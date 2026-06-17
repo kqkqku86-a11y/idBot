@@ -1,22 +1,22 @@
 {
-	"geode": "4.4.0",
+	"geode": "5.7.1",
 	"gd": {
-		"win": "2.2074",
-		"android": "2.2074"
+		"win": "2.2081",
+		"mac": "2.2081",
+		"android": "2.2081",
+		"ios": "2.2081"
 	},
-	"version": "2.4.1",
+	"version": "2.6.0",
 	"id": "zilko.xdbot",
 	"name": "xdBot",
 	"developer": "Zilko",
 	"description": "Best Free Bot fr",
-	"dependencies": [
-		{
-			"id": "geode.custom-keybinds",
-			"version": ">=v1.10.0",
-			"importance": "required",
-			"platforms": ["win"]
+	"dependencies": {
+		"eclipse.eclipse-menu": {
+			"version": ">=1.8.3",
+			"required": false
 		}
-	],
+	},
 	"settings": {
 		"button-setting": {
 			"type": "custom:button",
@@ -28,10 +28,17 @@
 			"default": "Frame Fixes",
 			"one-of": ["Vanilla", "Input Fixes", "Frame Fixes"]
 		},
+		"default_save_format": {
+			"type": "string",
+			"name": "Default Save Format",
+			"description": "Default format for saving macros.",
+			"default": "GDR2",
+			"one-of": ["GDR2", "GDR", "JSON"]
+		},
 		"frame_offset": {
 			"name": "Frame Offset",
-			"description": "Adds a frame offset when recording or playing macros",
-			"type": "int", 
+			"description": "Adds a frame offset when recording or playing macros.",
+			"type": "int",
 			"default": 0,
 			"min": -8,
 			"max": 8
@@ -40,7 +47,13 @@
 			"name": "Button at Endscreen",
 			"description": "Shows the menu button at the endscreen.",
 			"type": "bool",
-			"default": false 
+			"default": false
+		},
+		"open_menu_instant": {
+			"name": "Open Menu Instantly",
+			"description": "Opens the menu without the opening animation.",
+			"type": "bool",
+			"default": false
 		},
 		"ffmpeg_path": {
 			"name": "ffmpeg.exe Path",
@@ -52,17 +65,115 @@
 		"macros_folder": {
 			"name": "Macro Save Location",
 			"type": "folder",
-			"default": "{gd_dir}/macros"
+			"default": {
+				"win": "{gd_dir}/macros",
+				"mac": "{gd_dir}/macros",
+				"android": "{gd_dir}/macros",
+				"ios": "{gd_dir}/macros"
+			},
+			"platforms": ["win", "mac", "android"]
 		},
 		"autosaves_folder": {
 			"name": "Auto Saves Location",
 			"type": "folder",
-			"default": "{gd_dir}/autosaves"
+			"default": {
+				"win": "{gd_dir}/autosaves",
+				"mac": "{gd_dir}/autosaves",
+				"android": "{gd_dir}/autosaves",
+				"ios": "{gd_dir}/autosaves"
+			},
+			"platforms": ["win", "mac", "android"]
 		},
 		"render_folder": {
 			"name": "Render Save Location",
 			"type": "folder",
-			"default": "{gd_dir}/renders"
+			"default": {
+				"win": "{gd_dir}/renders",
+				"mac": "{gd_dir}/renders",
+				"android": "{gd_dir}/renders",
+				"ios": "{gd_dir}/renders"
+			},
+			"platforms": ["win", "mac", "android"]
+		},
+		"open_menu_keybind": {
+			"name": "Open Menu Keybind",
+			"description": "The keybind to open the xdBot menu.",
+			"type": "keybind",
+			"default": "Alt+F",
+			"category": "universal",
+			"migrate-from": "zilko.xdbot/open_menu"
+		},
+		"toggle_recording_keybind": {
+			"name": "Recording Keybind",
+			"description": "The keybind to start and stop recording a macro.",
+			"type": "keybind",
+			"default": "Alt+G",
+			"category": "gameplay",
+			"migrate-from": "zilko.xdbot/toggle_recording"
+		},
+		"toggle_playing_keybind": {
+			"name": "Playing Keybind",
+			"description": "The keybind to start and stop playing a macro.",
+			"type": "keybind",
+			"default": "Alt+H",
+			"category": "gameplay",
+			"migrate-from": "zilko.xdbot/toggle_playing"
+		},
+		"toggle_speedhack_keybind": {
+			"name": "Speedhack Keybind",
+			"description": "The keybind to toggle speedhack.",
+			"type": "keybind",
+			"default": "Alt+S",
+			"category": "gameplay",
+			"migrate-from": "zilko.xdbot/toggle_speedhack"
+		},
+		"toggle_noclip_keybind": {
+			"name": "Noclip Keybind",
+			"description": "The keybind to toggle noclip.",
+			"type": "keybind",
+			"default": "Alt+N",
+			"category": "gameplay",
+			"migrate-from": "zilko.xdbot/toggle_noclip"
+		},
+		"toggle_frame_stepper_keybind": {
+			"name": "Frame Stepper Keybind",
+			"description": "The keybind to toggle the frame stepper.",
+			"type": "keybind",
+			"default": "Alt+C",
+			"category": "gameplay",
+			"migrate-from": "zilko.xdbot/toggle_frame_stepper"
+		},
+		"step_frame_keybind": {
+			"name": "Step Frame Keybind",
+			"description": "The keybind to step a frame when the frame stepper is enabled.",
+			"type": "keybind",
+			"default": "V",
+			"category": "gameplay",
+			"migrate-from": "zilko.xdbot/step_frame"
+		},
+		"backstep_frame_keybind": {
+			"name": "Backstep Frame Keybind",
+			"description": "The keybind to go back a frame when the frame stepper is enabled.",
+			"type": "keybind",
+			"default": "Shift+V",
+			"category": "gameplay"
+		},
+		"show_trajectory_keybind": {
+			"name": "Show Trajectory Keybind",
+			"description": "The keybind to toggle the trajectory while recording a macro.",
+			"type": "keybind",
+			"default": "Alt+T",
+			"category": "gameplay",
+			"migrate-from": "zilko.xdbot/show_trajectory"
+		},
+		"toggle_render_keybind": {
+			"name": "Render Keybind",
+			"description": "The keybind to start and stop the renderer.",
+			"type": "keybind",
+			"default": "Alt+P",
+			"category": "gameplay",
+			"migrate-from": "zilko.xdbot/toggle_render",
+			"platforms": ["win", "mac", "android"]
 		},
 		"background_color": {
             "name": "Menu background color",
@@ -73,22 +184,19 @@
 			"name": "Keybinds on editor",
 			"description": "Enables keybinds while on the level editor.",
 			"type": "bool",
-			"default": false,
-			"platforms": ["win"]
+			"default": false
 		},
 		"disable_keybinds": {
 			"name": "Disable keybinds",
 			"description": "Disables all keybinds.",
 			"type": "bool",
-			"default": false,
-			"platforms": ["win"]
+			"default": false
 		},
 		"recording_only_keybinds": {
 			"name": "Keybinds only while recording",
 			"description": "Keybinds only work while recording a macro.",
 			"type": "bool",
-			"default": false,
-			"platforms": ["win"]
+			"default": false
 		},
 		"level_settings_button": {
 			"name": "Show Button At Settings",
@@ -108,13 +216,6 @@
 			"type": "bool",
 			"default": true
 		},
-		"frame_fixes_limit": {
-			"name": "Frame Fixes Limit in FPS",
-			"description": "Limits how many frame fixes per second there will be.",
-			"type": "int",
-			"default": 240,
-			"min": 1
-		},
 		"auto_stop_playing": {
 			"name": "Auto Stop Playing",
 			"description": "Stops playing the macro when it ends.",
@@ -126,6 +227,33 @@
 			"description": "Locks the delta.",
 			"type": "bool",
 			"default": false
+		},
+		"lock_delta_mode": {
+			"name": "Lock Delta Mode",
+			"description": "Controls whether lock delta prioritizes accuracy or performance.",
+			"type": "string",
+			"default": "Accuracy",
+			"one-of": ["Accuracy", "Fast"]
+		},
+		"lock_delta_real_time": {
+			"name": "Lock Delta Real Time",
+			"description": "When disabled, caps how many physics steps lock delta can process per visual frame.",
+			"type": "bool",
+			"default": true
+		},
+		"lock_delta_max_upr": {
+			"name": "Lock Delta Max UPR",
+			"description": "Maximum updates per render when lock delta real time is disabled.",
+			"type": "int",
+			"default": 10,
+			"min": 1,
+			"max": 200
+		},
+		"lock_delta_use_visual_updates": {
+			"name": "Lock Delta Visual Updates",
+			"description": "Scales the max UPR cap by the current visual FPS when lock delta real time is disabled.",
+			"type": "bool",
+			"default": true
 		}
 	},
 	"resources": {

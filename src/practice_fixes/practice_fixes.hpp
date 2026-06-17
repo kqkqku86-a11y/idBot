@@ -1,22 +1,57 @@
-#include "../includes.hpp"
+// practice_fixes.hpp
+#pragma once
 
-class InputPracticeFixes {
-public:
-    static void applyFixes(PlayLayer* pl, PlayerData p1Data, PlayerData p2Data, int frame);
+#include "../core/bot.hpp"
+#include "checkpoint.hpp"
+#include <Geode/modify/PlayLayer.hpp>
 
-    static void eraseActions(int frame);
+class PracticeFix {
+  public:
+    static bool shouldEnable() {
+        auto& bot = Bot::get();
+        auto* pl = PlayLayer::get();
 
-    static std::vector<button> findButtons();
+        if (!pl || !pl->m_isPracticeMode)
+            return false;
 
-    static std::vector<int> fixInputs(std::vector<button> foundButtons, PlayLayer* pl, PlayerData p1Data, PlayerData p2Data, int frame);
+        return bot.alwaysPracticeFixes || bot.state == state::recording || bot.state == state::playing;
+    }
 
+    static void clearStoredFrames();
+    static void saveFrameStepperFrame();
+    static bool backstepFrame(int frames = 1);
+    static bool isLoadingFrameStepperBackstep();
+    static bool applyFrameStepperBackstep(CheckpointObject* checkpoint);
 };
 
 class PlayerPracticeFixes {
-public:
+  public:
+    struct SavedState {
+        SupplementalPlayerState supplemental;
+    };
 
-    static void applyData(PlayerObject* player, PlayerData data, bool isPlayer2, bool isFakePlayer = false);
+    static SavedState saveData(PlayerObject* p) {
+        SavedState s;
+        if (!p)
+            return s;
+        s.supplemental = SupplementalPlayerState(p);
+        return s;
+    }
 
-    static PlayerData saveData(PlayerObject* player);
+    static void applyData(PlayerObject* p, const SavedState& s) {
+        if (!p)
+            return;
+        s.supplemental.apply(p);
+    }
 
+    static void transfer(PlayerObject* from, PlayerObject* to, bool applyPos) {
+        if (!from || !to)
+            return;
+        SavedState s = saveData(from);
+        if (applyPos) {
+            to->setPosition(from->getPosition());
+            to->setRotation(from->getRotation());
+        }
+        applyData(to, s);
+    }
 };

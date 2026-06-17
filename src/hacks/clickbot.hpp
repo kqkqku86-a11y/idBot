@@ -1,4 +1,11 @@
-#include "../includes.hpp"
+#pragma once
+
+#include <Geode/Geode.hpp>
+
+#include <filesystem>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 const std::vector<std::string> buttonNames = { "hold_click", "release_click", "hold_left", "release_left", "hold_right", "release_right" };
 
@@ -28,7 +35,7 @@ struct matjson::Serialize<ClickSetting> {
         matjson::Value obj;
 
         obj["disabled"] = sett.disabled;
-        obj["path"] = sett.path.string();
+        obj["path"] = geode::utils::string::pathToString(sett.path);
         obj["volume"] = sett.volume;
         obj["pitch"] = sett.pitch;
 
