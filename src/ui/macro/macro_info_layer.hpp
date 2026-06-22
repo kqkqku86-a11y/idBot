@@ -18,7 +18,7 @@ class MacroInfoLayer : public geode::Popup {
 
   private:
     bool init() {
-        if (!Popup::init(417, 268, "square01_001.png", CCRectZero))
+        if (!Popup::init(417, 268, "idbot_bg.png", CCRectZero))
             return false;
         setTitle("Current Macro");
         auto &bot = Bot::get();
