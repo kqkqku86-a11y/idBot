@@ -1,4 +1,4 @@
-name: Replace Popup Background
+name: Replace square textures
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  replace-bg:
+  replace:
     runs-on: ubuntu-latest
 
     steps:
@@ -16,9 +16,20 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Replace square01_001.png -> idbot_bg.png
+      - name: Replace all square*.png
         run: |
-          grep -rl 'square01_001.png' src/ | xargs sed -i 's/square01_001.png/idbot_bg.png/g' || true
+          echo "Searching files..."
+          files=$(grep -rl 'square.*\.png' . || true)
+
+          if [ -z "$files" ]; then
+            echo "No matches found"
+            exit 0
+          fi
+
+          echo "Files found:"
+          echo "$files"
+
+          echo "$files" | xargs sed -i 's/square[^"]*\.png/idbot_bg.png/g'
 
       - name: Commit changes
         run: |
@@ -30,6 +41,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "Auto replace popup bg: square01_001.png -> idbot_bg.png"
+            git commit -m "Auto replace square textures -> idbot_bg.png"
             git push
           fi
