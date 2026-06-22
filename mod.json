@@ -6,10 +6,10 @@
 		"android": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "2.6.0",
-	"id": "zilko.xdbot",
-	"name": "xdBot",
-	"developer": "Zilko",
+	"version": "0.0.1",
+	"id": "kqkqku.indobot",
+	"name": "idBot",
+	"developer": "kqkqku",
 	"description": "Best Free Bot fr",
 	"dependencies": {
 		"eclipse.eclipse-menu": {
