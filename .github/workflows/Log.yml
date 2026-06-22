@@ -1,0 +1,96 @@
+name: Daily Full Audit System
+
+on:
+  schedule:
+    - cron: "0 11 * * *"  # 18:00 WIB
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate full audit log (ALL DATA)
+        run: |
+          LOGFILE="log.txt"
+
+          echo "====================================" > $LOGFILE
+          echo "        DAILY FULL AUDIT LOG        " >> $LOGFILE
+          echo "====================================" >> $LOGFILE
+          echo "" >> $LOGFILE
+
+          echo "TIME UTC   : $(date -u)" >> $LOGFILE
+          echo "TIME WIB   : $(TZ='Asia/Jakarta' date)" >> $LOGFILE
+          echo "TRIGGER BY : ${{ github.actor }}" >> $LOGFILE
+          echo "" >> $LOGFILE
+
+          echo "====================================" >> $LOGFILE
+          echo "LATEST COMMITS (24 HOURS)" >> $LOGFILE
+          echo "====================================" >> $LOGFILE
+
+          git log --since="24 hours ago" \
+            --pretty=format:"%h | AUTHOR: %an | EMAIL: %ae | DATE: %ad | MSG: %s" \
+            --date=short >> $LOGFILE || echo "No commits" >> $LOGFILE
+
+          echo "" >> $LOGFILE
+          echo "====================================" >> $LOGFILE
+          echo "FILES CHANGED (24 HOURS)" >> $LOGFILE
+          echo "====================================" >> $LOGFILE
+
+          git log --since="24 hours ago" --name-only --pretty=format: \
+            | sed '/^$/d' | sort -u >> $LOGFILE || echo "No file changes" >> $LOGFILE
+
+          echo "" >> $LOGFILE
+          echo "====================================" >> $LOGFILE
+          echo "FULL DIFF PER COMMIT (24 HOURS)" >> $LOGFILE
+          echo "====================================" >> $LOGFILE
+
+          COMMITS=$(git rev-list --since="24 hours ago" HEAD)
+
+          if [ -z "$COMMITS" ]; then
+            echo "No commits found" >> $LOGFILE
+          else
+            for c in $COMMITS
+            do
+              echo "" >> $LOGFILE
+              echo "------------------------------------" >> $LOGFILE
+              echo "COMMIT: $c" >> $LOGFILE
+              echo "AUTHOR: $(git show -s --format='%an' $c)" >> $LOGFILE
+              echo "EMAIL : $(git show -s --format='%ae' $c)" >> $LOGFILE
+              echo "MSG   : $(git show -s --format='%s' $c)" >> $LOGFILE
+              echo "DATE  : $(git show -s --format='%ad' $c)" >> $LOGFILE
+              echo "------------------------------------" >> $LOGFILE
+
+              echo "FILES:" >> $LOGFILE
+              git show --name-only --pretty="" $c >> $LOGFILE
+
+              echo "" >> $LOGFILE
+              echo "DIFF:" >> $LOGFILE
+              git show --unified=3 --pretty="" $c >> $LOGFILE
+            done
+          fi
+
+      - name: Commit log safely
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add log.txt
+
+          git commit -m "Daily full audit log" || exit 0
+
+          git push
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-full-audit-log
+          path: log.txt
