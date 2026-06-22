@@ -513,7 +513,7 @@ void LoadMacroLayer::addList(bool refresh, float prevScroll) {
     leftBorder->setScaleY(5.6f);
     leftBorder->setPosition({-5.45, -1});
 
-    NineSlice* listBackground = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    NineSlice* listBackground = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     listBackground->setScale(0.7f);
     listBackground->setColor({0, 0, 0});
     listBackground->setOpacity(75);

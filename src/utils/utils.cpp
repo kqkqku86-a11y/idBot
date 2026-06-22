@@ -25,7 +25,7 @@ std::string Utils::formatTime(std::time_t time) {
 
 std::string Utils::getTexture() {
     cocos2d::ccColor3B color = Mod::get()->getSettingValue<cocos2d::ccColor3B>("background_color");
-    std::string texture = color == ccc3(51, 68, 153) ? "GJ_square02.png" : "GJ_square06.png";
+    std::string texture = color == ccc3(51, 68, 153) ? "GJ_idbot_bg.png" : "GJ_idbot_bg.png";
     
     return texture;
 }

@@ -23,7 +23,7 @@ class RenderPresetsLayer : public geode::Popup {
             return false;
         setTitle("Render Presets");
 
-        NineSlice *bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+        NineSlice *bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
         bg->setColor({0, 0, 0});
         bg->setOpacity(75);
         bg->setPosition({m_size.width / 2, 116.5});

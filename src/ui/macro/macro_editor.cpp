@@ -142,7 +142,7 @@ bool MacroEditLayer::init() {
     noInputsLabel2->setScale(0.625f);
     menu->addChild(noInputsLabel2);
 
-    hoveredBg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    hoveredBg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     hoveredBg->setColor({255, 255, 255});
     hoveredBg->setOpacity(44);
     hoveredBg->setScale(0.375f);
@@ -152,7 +152,7 @@ bool MacroEditLayer::init() {
     hoveredBg->setVisible(false);
     menu->addChild(hoveredBg);
 
-    selectedBg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    selectedBg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     selectedBg->setColor({232, 255, 0});
     selectedBg->setOpacity(44);
     selectedBg->setScale(0.375f);
@@ -161,7 +161,7 @@ bool MacroEditLayer::init() {
     selectedBg->setContentSize({471, 65});
     menu->addChild(selectedBg);
 
-    listBg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    listBg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     listBg->setColor({0, 0, 0});
     listBg->setOpacity(78);
     listBg->setPositionX(-91);
@@ -169,7 +169,7 @@ bool MacroEditLayer::init() {
     listBg->setContentSize({194, 209});
     menu->addChild(listBg);
 
-    selectedInputBg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    selectedInputBg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     selectedInputBg->setColor({0, 0, 0});
     selectedInputBg->setOpacity(78);
     selectedInputBg->setPosition({117, 4});
@@ -289,7 +289,7 @@ bool MacroEditLayer::init() {
     btn->setPosition({xPos + 120, yPos - 35});
     selectedInputMenu->addChild(btn);
 
-    NineSlice *bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    NineSlice *bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setColor({0, 0, 0});
     bg->setScale(0.3125f);
     bg->setOpacity(90);
@@ -321,7 +321,7 @@ bool MacroEditLayer::init() {
     btn->setPosition({xPos + 120, yPos - 66});
     selectedInputMenu->addChild(btn);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setColor({0, 0, 0});
     bg->setScale(0.3125f);
     bg->setOpacity(90);
@@ -353,7 +353,7 @@ bool MacroEditLayer::init() {
     btn->setPosition({xPos + 120, yPos - 97});
     selectedInputMenu->addChild(btn);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setColor({0, 0, 0});
     bg->setScale(0.3125f);
     bg->setOpacity(90);

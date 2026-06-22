@@ -145,7 +145,7 @@ bool ButtonEditLayer::init() {
     selectedLbl->setPositionY(121);
     menu->addChild(selectedLbl);
 
-    NineSlice* bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    NineSlice* bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
     bg->setPositionY(77);

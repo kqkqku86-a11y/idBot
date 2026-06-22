@@ -698,7 +698,7 @@ bool RecordLayer::init() {
 
 #endif
 
-    NineSlice *bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    NineSlice *bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.7f);
     bg->setColor({0, 0, 0});
     bg->setOpacity(75);
@@ -707,7 +707,7 @@ bool RecordLayer::init() {
     bg->setContentSize({275, 151});
     menu->addChild(bg);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.7f);
     bg->setColor({0, 0, 0});
     bg->setOpacity(75);
@@ -716,7 +716,7 @@ bool RecordLayer::init() {
     bg->setContentSize({275, 169});
     menu->addChild(bg);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.7f);
     bg->setColor({0, 0, 0});
     bg->setOpacity(75);

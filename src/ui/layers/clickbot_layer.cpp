@@ -41,7 +41,7 @@ bool ClickbotLayer::init() {
     CCMenu *menu = CCMenu::create();
     m_mainLayer->addChild(menu);
 
-    NineSlice *bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    NineSlice *bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
     bg->setPosition(ccp(-79, -10));
@@ -59,7 +59,7 @@ bool ClickbotLayer::init() {
     lbl->setScale(0.35);
     menu->addChild(lbl);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.375);
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
@@ -90,7 +90,7 @@ bool ClickbotLayer::init() {
     lbl->setScale(0.35);
     menu->addChild(lbl);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.375);
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
@@ -118,7 +118,7 @@ bool ClickbotLayer::init() {
     lbl->setScale(0.35);
     menu->addChild(lbl);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.375);
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
@@ -146,7 +146,7 @@ bool ClickbotLayer::init() {
     lbl->setScale(0.35);
     menu->addChild(lbl);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.375);
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
@@ -174,7 +174,7 @@ bool ClickbotLayer::init() {
     lbl->setScale(0.35);
     menu->addChild(lbl);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.375);
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
@@ -202,7 +202,7 @@ bool ClickbotLayer::init() {
     lbl->setScale(0.35);
     menu->addChild(lbl);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setScale(0.375);
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
@@ -225,7 +225,7 @@ bool ClickbotLayer::init() {
     btn->setID("release_right");
     menu->addChild(btn);
 
-    bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setColor({0, 0, 0});
     bg->setOpacity(78);
     bg->setPosition(ccp(128, -10));
@@ -367,7 +367,7 @@ bool ClickSettingsLayer::init(std::string button, geode::Popup *layer) {
     if (!std::filesystem::exists(settings.path))
         filename = "N/A";
 
-    NineSlice *bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+    NineSlice *bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
     bg->setColor({0, 0, 0});
     bg->setScale(0.6f);
     bg->setOpacity(88);

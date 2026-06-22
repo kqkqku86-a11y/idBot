@@ -29,7 +29,7 @@ class MacroInfoLayer : public geode::Popup {
         for (const auto &input : bot.replay.inputs)
             playerInputs[input.player2][input.button - 1][input.down]++;
 
-        NineSlice *bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+        NineSlice *bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
         bg->setColor({0, 0, 0});
         bg->setOpacity(75);
         bg->setPosition(ccp(29, 225));
@@ -37,7 +37,7 @@ class MacroInfoLayer : public geode::Popup {
         bg->setContentSize({162, 202});
         m_mainLayer->addChild(bg);
 
-        bg = NineSlice::create("square02b_001.png", {0, 0, 80, 80});
+        bg = NineSlice::create("idbot_bg.png", {0, 0, 80, 80});
         bg->setColor({0, 0, 0});
         bg->setOpacity(75);
         bg->setPosition(ccp(226, 225));
